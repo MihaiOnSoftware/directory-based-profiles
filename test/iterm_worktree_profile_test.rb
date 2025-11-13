@@ -1,0 +1,1180 @@
+# typed: false
+# frozen_string_literal: true
+
+require_relative "test_helper"
+require_relative "../bin/iterm_worktree_profile.rb"
+
+describe ItermWorktreeProfile do
+  let(:dynamic_profiles_dir) { File.expand_path("~/Library/Application Support/iTerm2/DynamicProfiles") }
+  let(:dynamic_profiles_file) { File.join(dynamic_profiles_dir, "worktrees.json") }
+  let(:iterm_prefs_path) { File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist") }
+
+  let(:success_status) do
+    mock.tap do |status|
+      status.stubs(:success?).returns(true)
+    end
+  end
+
+  let(:failure_status) do
+    mock.tap do |status|
+      status.stubs(:success?).returns(false)
+    end
+  end
+
+  before do
+    require "open3"
+
+    @written_files = {}
+
+    File.stubs(:exist?).returns(false)
+    color_presets_path = "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist"
+    File.stubs(:exist?).with(color_presets_path).returns(true)
+
+    Open3.stubs(:capture3).raises("Unmocked Open3.capture3 call")
+    File.stubs(:read).raises("Unmocked File.read call")
+    File.stubs(:write).with do |path, content|
+      @written_files[path] = content
+      true
+    end.returns(100)
+    File.stubs(:directory?).raises("Unmocked File.directory? call")
+    FileUtils.stubs(:mkdir_p).raises("Unmocked FileUtils.mkdir_p call")
+    ItermWorktreeProfile.any_instance.stubs(:system).returns(true)
+  end
+
+  describe "basic profile creation" do
+    before do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+    end
+
+    it "generates profile with unique guid" do
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+
+      guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+      assert_valid_guid_format(guid)
+    end
+
+    it "writes to correct dynamic profiles location" do
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+
+      assert(@written_files.key?(dynamic_profiles_file), "Should write to #{dynamic_profiles_file}")
+    end
+
+    it "writes profile with required fields and correct structure" do
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+
+      expected_guid = generate_expected_guid("project")
+      expected_profile = {
+        "Name" => "Worktree: project",
+        "Guid" => expected_guid,
+        "Badge Text" => "project",
+        "Use Separate Colors for Light and Dark Mode" => false,
+        "Rewritable" => true,
+      }
+      assert_profile_structure(profile, expected_profile)
+    end
+
+    it "creates directory if missing" do
+      stub_directory_exists(dynamic_profiles_dir, false)
+
+      FileUtils.expects(:mkdir_p).with(dynamic_profiles_dir)
+
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+    end
+
+    it "overwrites existing file" do
+      first_write_json = JSON.generate({ "Profiles" => [{ "Name" => "Test", "Guid" => "TEST-GUID" }] })
+
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+      assert(@written_files.key?(dynamic_profiles_file), "Should write file on first run")
+
+      create_instance(path: "/tmp/project", existing_profiles_content: first_write_json).run
+      assert(@written_files.key?(dynamic_profiles_file), "Should write file on second run")
+    end
+  end
+
+  describe "default profile and bookmark inheritance" do
+    before do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+    end
+
+    it "reads default profile guid from preferences" do
+      create_instance(
+        path: "/tmp/project",
+        default_guid_output: ["TEST-GUID-1234\n", "", success_status],
+        bookmarks_output: [JSON.generate([{ "Guid" => "TEST-GUID-1234", "Name" => "Default" }]), "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      Open3.expects(:capture3).never
+    end
+
+    it "reads bookmark from preferences as json" do
+      bookmark_data = {
+        "Guid" => "ABC-123",
+        "Name" => "My Profile",
+        "Columns" => 120,
+        "Rows" => 40,
+        "Background Color" => { "Red Component" => 0.1 },
+      }
+
+      create_instance(
+        path: "/tmp/project",
+        default_guid_output: ["ABC-123\n", "", success_status],
+        bookmarks_output: [JSON.generate([bookmark_data]), "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert(profile["Name"].start_with?("Worktree: "), "Profile name should start with 'Worktree: '")
+      assert_valid_guid_format(profile["Guid"])
+      assert_profile_inherits_properties(profile, {
+        "Columns" => 120,
+        "Rows" => 40,
+        "Background Color" => { "Red Component" => 0.1 },
+      })
+    end
+
+    it "finds profile by guid when multiple bookmarks exist" do
+      bookmarks = [
+        { "Guid" => "PROFILE-1", "Name" => "First", "Columns" => 80 },
+        { "Guid" => "PROFILE-2", "Name" => "Second", "Columns" => 120 },
+        { "Guid" => "PROFILE-3", "Name" => "Third", "Columns" => 160 },
+      ]
+
+      create_instance(
+        path: "/tmp/project",
+        default_guid_output: ["PROFILE-2\n", "", success_status],
+        bookmarks_output: [JSON.generate(bookmarks[0..1]), "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_equal 120, profile["Columns"]
+    end
+
+    it "merges settings into existing profile preserving name and guid" do
+      bookmark_data = {
+        "Guid" => "DEFAULT-123",
+        "Name" => "Default Profile Name",
+        "Columns" => 100,
+        "Rows" => 30,
+        "Font" => "Monaco",
+        "Background Color" => { "Red Component" => 0.5 },
+      }
+
+      create_instance(
+        path: "/tmp/project",
+        default_guid_output: ["DEFAULT-123\n", "", success_status],
+        bookmarks_output: [JSON.generate([bookmark_data]), "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert(profile["Name"].start_with?("Worktree: "), "Profile name should start with 'Worktree: '")
+      assert_valid_guid_format(profile["Guid"])
+      assert_profile_has_new_guid_and_name(profile, "DEFAULT-123")
+      assert_profile_properties(profile, {
+        "Columns" => 100,
+        "Rows" => 30,
+        "Font" => "Monaco",
+        "Background Color" => { "Red Component" => 0.5 },
+      })
+    end
+  end
+
+  describe "error handling" do
+    before do
+      setup_basic_directory
+    end
+
+    it "handles missing preferences file" do
+      assert_raises_with_message(StandardError, /Unable to read default profile GUID/) do
+        create_instance(
+          path: "/tmp/project",
+          default_guid_output: ["", "file not found", failure_status],
+        ).run
+      end
+    end
+
+    it "handles default profile not found in bookmarks" do
+      bookmarks = [
+        { "Guid" => "OTHER-1" },
+        { "Guid" => "OTHER-2" },
+      ]
+
+      assert_raises_with_message(StandardError, /Default profile not found/) do
+        create_instance(
+          path: "/tmp/project",
+          default_guid_output: ["MISSING-GUID\n", "", success_status],
+          bookmarks_output: [JSON.generate(bookmarks), "", success_status],
+        ).run
+      end
+    end
+
+    it "handles bookmark count read failure" do
+      assert_raises_with_message(StandardError, /Unable to read bookmarks/) do
+        create_instance(
+          path: "/tmp/project",
+          default_guid_output: ["TEST-GUID\n", "", success_status],
+          bookmarks_output: ["", "error reading", failure_status],
+        ).run
+      end
+    end
+
+    it "handles bookmark read failure at index" do
+      error = assert_raises(StandardError) do
+        create_instance(
+          path: "/tmp/project",
+          default_guid_output: ["TEST-GUID\n", "", success_status],
+          bookmarks_output: ["invalid json", "", success_status],
+        ).run
+      end
+      assert(error.message.include?("unexpected character"))
+    end
+  end
+
+  describe "color presets" do
+    let(:color_presets_path) { "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist" }
+
+    before do
+      stub_config_file_operations
+    end
+
+    it "loads preset from color presets plist" do
+      preset_data = {
+        "Ansi 0 Color" => { "Red Component" => 0.0 },
+        "Foreground Color" => { "Blue Component" => 0.5 },
+      }
+
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Solarized Dark"] = preset_data
+
+      create_instance(
+        preset_name: "Solarized Dark",
+        path: "/tmp/project",
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_color_components(profile, preset_data)
+    end
+
+    it "applies preset colors to profile" do
+      default_profile = {
+        "Guid" => "DEFAULT-GUID",
+        "Name" => "Default",
+        "Columns" => 120,
+        "Font" => "Monaco",
+      }
+
+      preset_colors = {
+        "Background Color" => { "Red Component" => 0.1, "Green Component" => 0.2 },
+        "Foreground Color" => { "Blue Component" => 0.9 },
+      }
+
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Tango Dark"] = preset_colors
+
+      create_instance(
+        preset_name: "Tango Dark",
+        path: "/tmp/project",
+        default_guid_output: ["DEFAULT-GUID\n", "", success_status],
+        bookmarks_output: [JSON.generate([default_profile]), "", success_status],
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_profile_properties(profile, { "Columns" => 120, "Font" => "Monaco" })
+      assert_color_components(profile, preset_colors)
+    end
+
+    it "raises error when preset does not exist" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      presets_hash = { "Solarized Dark" => {}, "Tango Dark" => {} }
+
+      assert_raises_with_message(StandardError, /Color preset 'NonExistent' not found/) do
+        create_instance(
+          preset_name: "NonExistent",
+          path: "/tmp/project",
+          color_presets_output: [JSON.generate(presets_hash), "", success_status],
+        ).run
+      end
+    end
+
+    it "raises error when color presets plist not found" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+      File.expects(:exist?).with(color_presets_path).returns(false)
+
+      assert_raises_with_message(StandardError, /ColorPresets.plist not found/) do
+        create_instance(
+          preset_name: "Solarized Dark",
+          path: "/tmp/project",
+        ).run
+      end
+    end
+
+    it "raises error when color presets plist cannot be read" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      assert_raises_with_message(StandardError, /Unable to read ColorPresets.plist/) do
+        create_instance(
+          preset_name: "Solarized Dark",
+          path: "/tmp/project",
+          color_presets_output: ["", "plutil failed", failure_status],
+        ).run
+      end
+    end
+
+    it "uses solarized dark by default" do
+      preset_data = { "Background Color" => { "Red Component" => 0.0 } }
+
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Solarized Dark"] = preset_data
+
+      create_instance(
+        path: "/tmp/project",
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_equal({ "Red Component" => 0.0 }, profile["Background Color"])
+    end
+
+    it "accepts custom preset via cli" do
+      preset_data = { "Background Color" => { "Red Component" => 1.0 } }
+
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Smoooooth"] = preset_data
+
+      create_instance(
+        preset_name: "Smoooooth",
+        path: "/tmp/project",
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_equal({ "Red Component" => 1.0 }, profile["Background Color"])
+    end
+  end
+
+  describe "path argument" do
+    before do
+      stub_config_file_operations
+    end
+
+    it "accepts path argument and uses it in profile naming and badge text" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      create_instance(
+        path: "/Users/test/world/trees/myworktree/src",
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_valid_worktree_profile(profile, "myworktree")
+    end
+
+    it "uses basename when path does not match trees pattern for both profile name and badge text" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      create_instance(
+        path: "/Users/test/myproject/src",
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_valid_worktree_profile(profile, "src")
+    end
+  end
+
+  describe "stable GUID generation" do
+    before do
+      stub_config_file_operations
+    end
+
+    it "generates same guid for same worktree name" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      create_instance(
+        path: "/Users/test/trees/sameworktree/src",
+        existing_profiles_content: nil,
+      ).run
+
+      first_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      create_instance(
+        path: "/Users/test/trees/sameworktree/src",
+        existing_profiles_content: nil,
+      ).run
+
+      second_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      assert_equal(first_guid, second_guid)
+    end
+
+    it "generates different guids for different worktree names" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      create_instance(
+        path: "/Users/test/trees/worktree1/src",
+        existing_profiles_content: nil,
+      ).run
+
+      first_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      create_instance(
+        path: "/Users/test/trees/worktree2/src",
+        existing_profiles_content: nil,
+      ).run
+
+      second_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      refute_equal(first_guid, second_guid)
+    end
+  end
+
+  describe "shell integration" do
+    it "generates shell integration code with profile switching logic" do
+      shell_code = ItermWorktreeProfile.generate_shell_integration_code
+
+      assert_shell_integration_valid(shell_code)
+    end
+  end
+
+  describe "auto-detect worktree" do
+    before do
+      stub_config_file_operations
+    end
+
+    it "detects worktree from current directory" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+
+      create_instance(
+        worktree_path_output: ["/Users/test/world/trees/myworktree/src\n", "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_valid_worktree_profile(profile, "myworktree")
+    end
+
+    it "raises error when not in a worktree" do
+      setup_basic_directory
+
+      assert_raises_with_message(StandardError, /not in a git worktree/) do
+        create_instance(
+          worktree_path_output: ["", "fatal: not a git repository", failure_status],
+        ).run
+      end
+    end
+  end
+
+  describe "preset configuration" do
+    let(:config_dir) { File.expand_path("~/.config") }
+    let(:config_file) { File.join(config_dir, "iterm_worktree_profile.json") }
+
+    def stub_profile_operations_without_config
+      expect_default_guid("DEFAULT-GUID")
+      expect_bookmark_count(1)
+      expect_bookmark_at_index(0, { "Guid" => "DEFAULT-GUID" })
+    end
+
+    before do
+      File.stubs(:write).with { |path, _| path.end_with?(".iterm_profile") }.returns(18)
+    end
+
+    it "selects from preferred presets when no saved config and default preset" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      Array.any_instance.stubs(:sample).returns("Smoooooth")
+
+      create_instance(path: "/tmp/project", config_file_content: nil, existing_profiles_content: nil).run
+
+      parsed_config = JSON.parse(@written_files[config_file])
+      worktree_name = "project"
+      assert_equal("Smoooooth", parsed_config[worktree_name], "Should save the selected preset")
+    end
+
+    it "uses saved preset when preset_name is nil and config exists" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      config_data = { "testworktree" => "Tango Dark" }
+      ItermWorktreeProfile.any_instance.stubs(:write_config)
+
+      preset_data = { "Background Color" => { "Red Component" => 0.5 } }
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Tango Dark"] = preset_data
+
+      create_instance(
+        preset_name: nil,
+        path: "/Users/test/trees/testworktree/src",
+        config_file_content: JSON.generate(config_data),
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      parsed = JSON.parse(@written_files[dynamic_profiles_file])
+      profile = parsed["Profiles"][0]
+      assert_equal({ "Red Component" => 0.5 }, profile["Background Color"])
+    end
+
+    it "selects random preset when preset_name is nil and no config exists" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      Array.any_instance.stubs(:sample).returns("Tango Light")
+
+      create_instance(preset_name: nil, path: "/tmp/randomproject", config_file_content: nil, existing_profiles_content: nil).run
+
+      parsed_config = JSON.parse(@written_files[config_file])
+      worktree_name = "randomproject"
+      assert_equal("Tango Light", parsed_config[worktree_name], "Should save the randomly selected preset")
+    end
+
+    it "uses explicit preset when preset_name is non-nil even if config exists" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      config_data = { "explicitworktree" => "Old Preset" }
+
+      written_config = nil
+      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+        stub.with do |config|
+          written_config = JSON.pretty_generate(config)
+          true
+        end
+      end
+
+      preset_data = { "Background Color" => { "Red Component" => 1.0 } }
+      presets_with_data = default_io_results[:color_presets_output][0]
+      presets_hash = JSON.parse(presets_with_data)
+      presets_hash["Smoooooth"] = preset_data
+
+      create_instance(
+        preset_name: "Smoooooth",
+        path: "/Users/test/trees/explicitworktree/src",
+        config_file_content: JSON.generate(config_data),
+        existing_profiles_content: nil,
+        color_presets_output: [JSON.generate(presets_hash), "", success_status],
+      ).run
+
+      parsed = JSON.parse(@written_files[dynamic_profiles_file])
+      profile = parsed["Profiles"][0]
+      assert_equal({ "Red Component" => 1.0 }, profile["Background Color"])
+
+      parsed_config = JSON.parse(written_config)
+      assert_equal("Smoooooth", parsed_config["explicitworktree"])
+    end
+
+    it "avoids presets already assigned to other worktrees when selecting randomly" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      existing_config = {
+        "worktree1" => "Solarized Dark",
+        "worktree2" => "Tango Dark",
+      }
+
+      Array.any_instance.stubs(:sample).returns("Solarized Light")
+
+      create_instance(
+        path: "/tmp/new_worktree",
+        config_file_content: JSON.generate(existing_config),
+        existing_profiles_content: nil,
+      ).run
+
+      parsed_config = JSON.parse(@written_files[config_file])
+      assigned_preset = parsed_config["new_worktree"]
+
+      assert_equal("Solarized Light", assigned_preset, "Should assign an available preset")
+    end
+
+    it "falls back to preferred presets when all six are already assigned" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      existing_config = {
+        "worktree1" => "Solarized Dark",
+        "worktree2" => "Tango Dark",
+        "worktree3" => "Solarized Light",
+        "worktree4" => "Tango Light",
+        "worktree5" => "Pastel (Dark Background)",
+        "worktree6" => "Smoooooth",
+      }
+
+      Array.any_instance.stubs(:sample).returns("Solarized Dark")
+
+      create_instance(
+        path: "/tmp/new_worktree",
+        config_file_content: JSON.generate(existing_config),
+        existing_profiles_content: nil,
+      ).run
+
+      parsed_config = JSON.parse(@written_files[config_file])
+      assigned_preset = parsed_config["new_worktree"]
+
+      assert_equal("Solarized Dark", assigned_preset, "Should fall back to a preferred preset")
+    end
+
+    it "loads config when it exists" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      config_data = { "worktree1" => "Tango Dark" }
+      ItermWorktreeProfile.any_instance.stubs(:write_config)
+
+      create_instance(
+        path: "/Users/test/trees/worktree1/src",
+        config_file_content: JSON.generate(config_data),
+        existing_profiles_content: nil,
+      ).run
+    end
+
+    it "saves config after successful run" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      written_config = nil
+      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+        stub.with do |config|
+          written_config = JSON.pretty_generate(config)
+          true
+        end
+      end
+
+      create_instance(
+        path: "/Users/test/trees/worktree2/src",
+        preset_name: "Tango Dark",
+        config_file_content: nil,
+        existing_profiles_content: nil,
+      ).run
+
+      parsed_config = JSON.parse(written_config)
+      assert_equal("Tango Dark", parsed_config["worktree2"])
+    end
+
+    it "creates config directory if missing" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      File.expects(:directory?).with(config_dir).returns(false)
+      FileUtils.expects(:mkdir_p).with(config_dir)
+
+      Array.any_instance.stubs(:sample).returns("Solarized Dark")
+
+      create_instance(
+        path: "/Users/test/trees/worktree3/src",
+        config_file_content: nil,
+        existing_profiles_content: nil,
+      ).run
+    end
+
+    it "updates preset in config when different preset provided" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_directory_exists(config_dir, true)
+
+      config_data = { "worktree5" => "Old Preset" }
+
+      written_config = nil
+      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+        stub.with do |config|
+          written_config = JSON.pretty_generate(config)
+          true
+        end
+      end
+
+      create_instance(
+        path: "/Users/test/trees/worktree5/src",
+        preset_name: "New Preset",
+        config_file_content: JSON.generate(config_data),
+        existing_profiles_content: nil,
+      ).run
+
+      parsed_config = JSON.parse(written_config)
+      assert_equal("New Preset", parsed_config["worktree5"])
+    end
+  end
+
+  describe "profile marker file" do
+    it "writes profile marker file with profile name" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
+      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      Array.any_instance.stubs(:sample).returns("Solarized Dark")
+
+      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
+
+      marker_file_path = File.join("/tmp/project", ".iterm_profile")
+      File.expects(:write).with(marker_file_path, "Worktree: project").returns(18)
+
+      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+    end
+
+    it "activates profile after creation" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
+      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
+      Array.any_instance.stubs(:sample).returns("Solarized Dark")
+
+      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
+
+      marker_file_path = File.join("/tmp/project", ".iterm_profile")
+      File.stubs(:write).with(marker_file_path, "Worktree: project").returns(18)
+      File.stubs(:exist?).with(marker_file_path).returns(true)
+
+      stdout = StringIO.new
+      instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stdout: stdout)
+      instance.expects(:system).with("it2profile", "-s", "Worktree: project").returns(true)
+
+      instance.run
+
+      output = stdout.string
+      assert(output.include?("Profile 'Worktree: project' created successfully!"))
+    end
+
+    it "warns about shell integration when not installed" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
+      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(false)
+      Array.any_instance.stubs(:sample).returns("Solarized Dark")
+
+      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
+
+      marker_file_path = File.join("/tmp/project", ".iterm_profile")
+      File.stubs(:write).with(marker_file_path, "Worktree: project").returns(18)
+
+      stderr = StringIO.new
+      instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stderr: stderr)
+      instance.expects(:system).never
+
+      instance.run
+
+      output = stderr.string
+      assert(output.include?("Note: Profile 'Worktree: project' created successfully!"))
+      assert(output.include?("To enable automatic profile switching:"))
+      assert(output.include?("1. Install iTerm2 Shell Integration: iTerm2 > Install Shell Integration"))
+      assert(output.include?("--generate-shell-integration >> ~/.zshrc"))
+      assert(output.include?("3. Restart your shell or run: source ~/.zshrc"))
+    end
+  end
+
+  describe "CLI" do
+    before do
+      stub_config_file_operations
+    end
+
+    it "handles --generate-shell-integration flag" do
+      output = StringIO.new
+      exit_code = ItermWorktreeProfile.run_cli(["--generate-shell-integration"], stdout: output)
+
+      shell_code = output.string
+
+      assert_equal(0, exit_code, "CLI should exit successfully")
+      assert_shell_integration_valid(shell_code)
+    end
+
+    it "handles errors gracefully" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      File.stubs(:exist?).with(config_file).returns(false)
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
+
+      require "open3"
+      failure_status = mock.tap { |status| status.stubs(:success?).returns(false) }
+      Open3.stubs(:capture3).returns(["", "PlistBuddy error", failure_status])
+
+      output = StringIO.new
+      exit_code = ItermWorktreeProfile.run_cli([], stdout: output)
+
+      assert_cli_error(exit_code, output)
+    end
+
+    it "handles help flag" do
+      output = StringIO.new
+      exit_code = ItermWorktreeProfile.run_cli(["--help"], stdout: output)
+
+      assert_cli_help(exit_code, output)
+    end
+
+    it "handles --preset option" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      ItermWorktreeProfile.any_instance.unstub(:write_config)
+      ItermWorktreeProfile.any_instance.unstub(:write_profile_marker)
+      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
+
+      config_dir = File.expand_path("~/.config")
+      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      stub_directory_exists(config_dir, true)
+      File.stubs(:exist?).with(config_file).returns(false)
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
+
+      marker_file_path = File.join("/tmp/test-path", ".iterm_profile")
+      File.stubs(:write).with(marker_file_path, anything).returns(18)
+      File.stubs(:exist?).with(marker_file_path).returns(true)
+
+      all_presets = {
+        "Solarized Dark" => {},
+        "Tango Dark" => {},
+        "Tango Light" => {},
+      }
+
+      require "open3"
+      Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", anything).returns(["DEFAULT-GUID\n", "", success_status])
+      Open3.stubs(:capture3).with("plutil -convert json -o - #{ItermWorktreeProfile::COLOR_PRESETS_PATH}").returns([JSON.generate(all_presets), "", success_status])
+      Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ItermWorktreeProfile::ITERM_PREFS_PATH} | plutil -convert json -o - -").returns([JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status])
+      Open3.stubs(:capture3).with("git", "rev-parse", "--show-toplevel").returns(["/tmp/test-path", "", success_status])
+
+      output = StringIO.new
+      exit_code = ItermWorktreeProfile.run_cli(["--preset", "Tango Dark", "/tmp/test-path"], stdout: output)
+
+      assert_equal(0, exit_code)
+      assert_match(/Profile.*created successfully/, output.string)
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      saved_config = @written_files[config_file]
+      assert(saved_config, "Config file should be written")
+      assert_equal("Tango Dark", JSON.parse(saved_config)["test-path"])
+    end
+
+    it "handles --clear-all flag" do
+      output = StringIO.new
+
+      File.expects(:exist?).with(dynamic_profiles_file).returns(true)
+      File.expects(:delete).with(dynamic_profiles_file)
+
+      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      File.expects(:exist?).with(config_file).returns(true)
+      File.expects(:delete).with(config_file)
+
+      exit_code = ItermWorktreeProfile.run_cli(["--clear-all"], stdout: output)
+
+      assert_equal(0, exit_code, "CLI should exit successfully")
+      assert_match(/All worktree profiles cleared/, output.string)
+    end
+
+    it "handles --clear-all when files don't exist" do
+      output = StringIO.new
+
+      File.expects(:exist?).with(dynamic_profiles_file).returns(false)
+      File.expects(:delete).with(dynamic_profiles_file).never
+
+      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      File.expects(:exist?).with(config_file).returns(false)
+      File.expects(:delete).with(config_file).never
+
+      exit_code = ItermWorktreeProfile.run_cli(["--clear-all"], stdout: output)
+
+      assert_equal(0, exit_code, "CLI should exit successfully")
+      assert_match(/All worktree profiles cleared/, output.string)
+    end
+  end
+
+  private
+
+  def setup_basic_directory
+    stub_directory_exists(dynamic_profiles_dir, true)
+  end
+
+  def setup_basic_environment
+    setup_basic_directory
+    stub_default_profile
+  end
+
+  def setup_basic_environment_multiple_times(times)
+    stub_directory_exists(dynamic_profiles_dir, true)
+    stub_default_profile_multiple_times(times)
+  end
+
+  def run_and_get_guid(path)
+    setup_basic_environment
+    create_instance(path: path).run
+    JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+  end
+
+  def stub_config_file_operations
+    ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
+    ItermWorktreeProfile.any_instance.stubs(:write_config)
+    ItermWorktreeProfile.any_instance.stubs(:write_profile_marker)
+    Array.any_instance.stubs(:sample).returns("Solarized Dark")
+  end
+
+  def stub_git_worktree_detection_success(path = "/tmp/project")
+    require "open3"
+
+    success_status = mock.tap { |status| status.stubs(:success?).returns(true) }
+
+    Open3.stubs(:capture3)
+      .with("git", "rev-parse", "--show-toplevel")
+      .returns([path, "", success_status])
+  end
+
+  def assert_color_components(profile, expected_colors)
+    expected_colors.each do |color_key, expected_value|
+      assert_equal(expected_value, profile[color_key], "Expected #{color_key} to match")
+    end
+  end
+
+  def assert_profile_properties(profile, expected_properties)
+    expected_properties.each do |key, expected_value|
+      assert_equal(expected_value, profile[key], "Expected #{key} to match")
+    end
+  end
+
+  def assert_profile_structure(profile, expected_profile)
+    assert_equal(expected_profile, profile)
+  end
+
+  def assert_profile_inherits_properties(profile, expected_properties)
+    assert_profile_properties(profile, expected_properties)
+  end
+
+  def assert_profile_has_new_guid_and_name(profile, original_guid)
+    refute_equal(original_guid, profile["Guid"])
+  end
+
+  def assert_raises_with_message(exception_class, message_pattern, &block)
+    error = assert_raises(exception_class, &block)
+    assert_match(message_pattern, error.message)
+  end
+
+  def stub_directory_exists(path, exists)
+    File.stubs(:directory?).with(path).returns(exists)
+  end
+
+  def expect_default_guid(guid)
+    require "open3"
+    iterm_prefs_path = File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist")
+
+    guid_xml = <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <string>#{guid}</string>
+      </plist>
+    XML
+
+    success_status = mock.tap { |status| status.stubs(:success?).returns(true) }
+
+    Open3.expects(:capture3)
+      .with("/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", iterm_prefs_path)
+      .returns([guid_xml, "", success_status])
+  end
+
+  def expect_bookmark_count(count)
+    iterm_prefs_path = File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist")
+    count_xml = <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <integer>#{count}</integer>
+      </plist>
+    XML
+
+    success_status = mock.tap { |status| status.stubs(:success?).returns(true) }
+
+    Open3.expects(:capture3)
+      .with("/usr/libexec/PlistBuddy", "-c", "Print 'New Bookmarks'", iterm_prefs_path)
+      .returns([count_xml, "", success_status])
+  end
+
+  def expect_bookmark_at_index(index, bookmark_data)
+    require "json"
+    require "open3"
+    iterm_prefs_path = File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist")
+
+    bookmark_json = JSON.generate(bookmark_data)
+
+    success_status = mock.tap { |status| status.stubs(:success?).returns(true) }
+
+    Open3.expects(:capture3)
+      .with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks:#{index}'\" #{iterm_prefs_path} | plutil -convert json -o - -")
+      .returns([bookmark_json, "", success_status])
+  end
+
+  def expect_color_preset(preset_name, preset_data)
+    require "json"
+    require "open3"
+
+    color_presets_path = "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist"
+    File.expects(:exist?).with(color_presets_path).returns(true)
+
+    plist_data = {
+      preset_name => preset_data,
+    }
+
+    success_status = mock.tap { |status| status.stubs(:success?).returns(true) }
+
+    Open3.expects(:capture3)
+      .with("plutil -convert json -o - #{color_presets_path}")
+      .returns([JSON.generate(plist_data), "", success_status])
+  end
+
+  def assert_valid_worktree_profile(profile_data, worktree_name)
+    assert_valid_guid_format(profile_data["Guid"])
+    assert(profile_data["Name"].include?(worktree_name), "Profile name should include worktree name '#{worktree_name}'")
+    assert_equal(worktree_name, profile_data["Badge Text"])
+  end
+
+  def assert_shell_integration_valid(shell_code)
+    assert(shell_code.include?("function"), "Shell code should include function definition")
+    assert(shell_code.include?("it2profile"), "Shell code should include it2profile command")
+    assert(shell_code.include?(".iterm_profile"), "Shell code should reference .iterm_profile marker file")
+    assert(shell_code.include?("cat"), "Shell code should read marker file contents")
+  end
+
+  def assert_cli_success(exit_code, output)
+    assert_equal(0, exit_code, "CLI should exit successfully")
+    assert(output.string.include?("successfully"), "CLI should output success message")
+  end
+
+  def assert_cli_error(exit_code, output)
+    assert_equal(1, exit_code, "CLI should exit with error code 1")
+    assert(output.string.include?("Error"), "CLI should output error message")
+  end
+
+  def assert_cli_help(exit_code, output)
+    assert_equal(0, exit_code, "CLI should exit successfully")
+    assert(output.string.include?("Usage"), "CLI should display usage information")
+  end
+
+  def assert_valid_guid_format(guid)
+    assert_match(/\A[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\z/, guid, "GUID should match UUID format")
+  end
+
+  def generate_expected_guid(worktree_name)
+    require "digest"
+    hash = Digest::SHA256.hexdigest(worktree_name)
+    "#{hash[0..7]}-#{hash[8..11]}-#{hash[12..15]}-#{hash[16..19]}-#{hash[20..31]}".upcase
+  end
+
+  def default_io_results
+    all_presets = {
+      "Solarized Dark" => {},
+      "Tango Dark" => {},
+      "Solarized Light" => {},
+      "Tango Light" => {},
+      "Pastel (Dark Background)" => {},
+      "Smoooooth" => {},
+      "New Preset" => {},
+    }
+    {
+      default_guid_output: ["DEFAULT-GUID\n", "", success_status],
+      bookmarks_output: [JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status],
+      color_presets_output: [JSON.generate(all_presets), "", success_status],
+      worktree_path_output: ["/tmp/test_worktree", "", success_status],
+      config_file_content: "{}",
+      existing_profiles_content: nil,
+    }
+  end
+
+  def create_instance(**overrides)
+    ItermWorktreeProfile.new(**default_io_results.merge(overrides))
+  end
+
+  def stub_default_profile
+    stub_config_file_operations
+    stub_git_worktree_detection_success
+    expect_default_guid("DEFAULT-GUID")
+    expect_bookmark_count(1)
+    expect_bookmark_at_index(0, { "Guid" => "DEFAULT-GUID" })
+    expect_color_preset("Solarized Dark", {})
+  end
+
+  def stub_default_profile_for_presets
+    stub_git_worktree_detection_success
+    expect_default_guid("DEFAULT-GUID")
+    expect_bookmark_count(1)
+    expect_bookmark_at_index(0, { "Guid" => "DEFAULT-GUID" })
+  end
+
+  def stub_default_profile_multiple_times(times)
+    require "open3"
+
+    stub_config_file_operations
+
+    guid = "DEFAULT-GUID"
+
+    success_status_git = mock.tap { |status| status.stubs(:success?).returns(true) }
+    Open3.stubs(:capture3)
+      .with("git", "rev-parse", "--show-toplevel")
+      .returns(["/tmp/test_worktree", "", success_status_git])
+      .times(times)
+    guid_xml = <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <string>#{guid}</string>
+      </plist>
+    XML
+
+    count_xml = <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <integer>1</integer>
+      </plist>
+    XML
+
+    bookmark_json = JSON.generate({ "Guid" => guid })
+
+    Open3.stubs(:capture3)
+      .with("/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", iterm_prefs_path)
+      .returns([guid_xml, "", success_status])
+      .times(times)
+
+    Open3.stubs(:capture3)
+      .with("/usr/libexec/PlistBuddy", "-c", "Print 'New Bookmarks'", iterm_prefs_path)
+      .returns([count_xml, "", success_status])
+      .times(times)
+
+    Open3.stubs(:capture3)
+      .with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks:0'\" #{iterm_prefs_path} | plutil -convert json -o - -")
+      .returns([bookmark_json, "", success_status])
+      .times(times)
+
+    color_presets_path = "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist"
+    File.stubs(:exist?).with(color_presets_path).returns(true)
+    Open3.stubs(:capture3)
+      .with("plutil -convert json -o - #{color_presets_path}")
+      .returns([JSON.generate({ "Solarized Dark" => {} }), "", success_status])
+      .times(times)
+  end
+end
