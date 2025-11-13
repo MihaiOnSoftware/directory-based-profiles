@@ -69,11 +69,11 @@ describe ItermDirectoryProfile do
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
 
-      expected_guid = generate_expected_guid("project")
+      expected_guid = generate_expected_guid("/tmp/project")
       expected_profile = {
-        "Name" => "Directory: project",
+        "Name" => "Directory: /tmp/project",
         "Guid" => expected_guid,
-        "Badge Text" => "project",
+        "Badge Text" => "/tmp/project",
         "Use Separate Colors for Light and Dark Mode" => false,
         "Rewritable" => true,
       }
@@ -406,10 +406,10 @@ describe ItermDirectoryProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_directory_profile(profile, "myworktree")
+      assert_valid_directory_profile(profile, "/Users/test/myworktree")
     end
 
-    it "uses basename when path does not match trees pattern for both profile name and badge text" do
+    it "uses full path when git is not available for both profile name and badge text" do
       stub_directory_exists(dynamic_profiles_dir, true)
       stub_config_file_operations
 
@@ -420,7 +420,7 @@ describe ItermDirectoryProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_directory_profile(profile, "src")
+      assert_valid_directory_profile(profile, "/Users/test/myproject/src")
     end
   end
 
@@ -498,7 +498,7 @@ describe ItermDirectoryProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_directory_profile(profile, "myworktree")
+      assert_valid_directory_profile(profile, "/Users/test/myworktree")
     end
 
   end
@@ -532,8 +532,8 @@ describe ItermDirectoryProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_equal("Directory: myproject", profile["Name"])
-      assert_equal("myproject", profile["Badge Text"])
+      assert_equal("Directory: /Users/test/myproject", profile["Name"])
+      assert_equal("/Users/test/myproject", profile["Badge Text"])
     end
 
     it "uses branch name for GUID generation for stability" do
@@ -587,15 +587,14 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
-      worktree_name = "project"
-      assert_equal("Smoooooth", parsed_config[worktree_name], "Should save the selected preset")
+      assert_equal("Smoooooth", parsed_config["/tmp/project"], "Should save the selected preset")
     end
 
     it "uses saved preset when preset_name is nil and config exists" do
       stub_directory_exists(dynamic_profiles_dir, true)
       stub_directory_exists(config_dir, true)
 
-      config_data = { "testworktree" => "Tango Dark" }
+      config_data = { "/Users/test/testworktree" => "Tango Dark" }
       ItermDirectoryProfile.any_instance.stubs(:write_config)
 
       preset_data = { "Background Color" => { "Red Component" => 0.5 } }
@@ -632,8 +631,7 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
-      worktree_name = "randomproject"
-      assert_equal("Tango Light", parsed_config[worktree_name], "Should save the randomly selected preset")
+      assert_equal("Tango Light", parsed_config["/tmp/randomproject"], "Should save the randomly selected preset")
     end
 
     it "uses explicit preset when preset_name is non-nil even if config exists" do
@@ -669,7 +667,7 @@ describe ItermDirectoryProfile do
       assert_equal({ "Red Component" => 1.0 }, profile["Background Color"])
 
       parsed_config = JSON.parse(written_config)
-      assert_equal("Smoooooth", parsed_config["explicitworktree"])
+      assert_equal("Smoooooth", parsed_config["/Users/test/explicitworktree"])
     end
 
     it "avoids presets already assigned to other worktrees when selecting randomly" do
@@ -691,7 +689,7 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
-      assigned_preset = parsed_config["new_worktree"]
+      assigned_preset = parsed_config["/tmp/new_worktree"]
 
       assert_equal("Solarized Light", assigned_preset, "Should assign an available preset")
     end
@@ -719,7 +717,7 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
-      assigned_preset = parsed_config["new_worktree"]
+      assigned_preset = parsed_config["/tmp/new_worktree"]
 
       assert_equal("Solarized Dark", assigned_preset, "Should fall back to a preferred preset")
     end
@@ -759,7 +757,7 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(written_config)
-      assert_equal("Tango Dark", parsed_config["worktree2"])
+      assert_equal("Tango Dark", parsed_config["/Users/test/worktree2"])
     end
 
     it "creates config directory if missing" do
@@ -800,7 +798,7 @@ describe ItermDirectoryProfile do
       ).run
 
       parsed_config = JSON.parse(written_config)
-      assert_equal("New Preset", parsed_config["worktree5"])
+      assert_equal("New Preset", parsed_config["/Users/test/worktree5"])
     end
   end
 
@@ -814,7 +812,7 @@ describe ItermDirectoryProfile do
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.expects(:write).with(marker_file_path, "Directory: project").returns(18)
+      File.expects(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
 
       create_instance(
         path: "/tmp/project",
@@ -833,7 +831,7 @@ describe ItermDirectoryProfile do
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Directory: project").returns(18)
+      File.stubs(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
       File.stubs(:exist?).with(marker_file_path).returns(true)
 
       stdout = StringIO.new
@@ -843,12 +841,12 @@ describe ItermDirectoryProfile do
         existing_profiles_content: nil,
         stdout: stdout
       )
-      instance.expects(:system).with("it2profile", "-s", "Directory: project").returns(true)
+      instance.expects(:system).with("it2profile", "-s", "Directory: /tmp/project").returns(true)
 
       instance.run
 
       output = stdout.string
-      assert(output.include?("Profile 'Directory: project' created successfully!"))
+      assert(output.include?("Profile 'Directory: /tmp/project' created successfully!"))
     end
 
     it "warns about shell integration when not installed" do
@@ -861,7 +859,7 @@ describe ItermDirectoryProfile do
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Directory: project").returns(18)
+      File.stubs(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
 
       stderr = StringIO.new
       instance = create_instance(
@@ -875,7 +873,7 @@ describe ItermDirectoryProfile do
       instance.run
 
       output = stderr.string
-      assert(output.include?("Note: Profile 'Directory: project' created successfully!"))
+      assert(output.include?("Note: Profile 'Directory: /tmp/project' created successfully!"))
       assert(output.include?("To enable automatic profile switching:"))
       assert(output.include?("1. Install iTerm2 Shell Integration: iTerm2 > Install Shell Integration"))
       assert(output.include?("--generate-shell-integration >> ~/.zshrc"))
@@ -959,7 +957,7 @@ describe ItermDirectoryProfile do
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
       saved_config = @written_files[config_file]
       assert(saved_config, "Config file should be written")
-      assert_equal("Tango Dark", JSON.parse(saved_config)["test-path"])
+      assert_equal("Tango Dark", JSON.parse(saved_config)["/tmp/test-path"])
     end
 
     it "handles --clear-all flag" do

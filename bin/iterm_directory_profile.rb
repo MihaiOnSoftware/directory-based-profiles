@@ -258,17 +258,13 @@ class ItermDirectoryProfile
     "#{hash[0..7]}-#{hash[8..11]}-#{hash[12..15]}-#{hash[16..19]}-#{hash[20..31]}".upcase
   end
 
-  def extract_directory_name(path)
-    File.basename(path)
-  end
-
   def get_display_name
     stdout, _stderr, status = @git_branch_output
 
     if status.success? && !stdout.strip.empty?
       stdout.strip
     else
-      extract_directory_name(@path)
+      @path
     end
   end
 
