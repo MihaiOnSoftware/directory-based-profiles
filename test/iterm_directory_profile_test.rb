@@ -74,6 +74,7 @@ describe ItermDirectoryProfile do
         "Name" => "Directory: /tmp/project",
         "Guid" => expected_guid,
         "Badge Text" => "/tmp/project",
+        "Bound Hosts" => ["/tmp/project"],
         "Use Separate Colors for Light and Dark Mode" => false,
         "Rewritable" => true,
       }
@@ -474,14 +475,6 @@ describe ItermDirectoryProfile do
     end
   end
 
-  describe "shell integration" do
-    it "generates shell integration code with profile switching logic" do
-      shell_code = ItermDirectoryProfile.generate_shell_integration_code
-
-      assert_shell_integration_valid(shell_code)
-    end
-  end
-
   describe "auto-detect worktree" do
     before do
       stub_config_file_operations
@@ -567,10 +560,6 @@ describe ItermDirectoryProfile do
       expect_default_guid("DEFAULT-GUID")
       expect_bookmark_count(1)
       expect_bookmark_at_index(0, { "Guid" => "DEFAULT-GUID" })
-    end
-
-    before do
-      File.stubs(:write).with { |path, _| path.end_with?(".iterm_profile") }.returns(18)
     end
 
     it "selects from preferred presets when no saved config and default preset" do
@@ -802,98 +791,9 @@ describe ItermDirectoryProfile do
     end
   end
 
-  describe "profile marker file" do
-    it "writes profile marker file with profile name" do
-      stub_directory_exists(dynamic_profiles_dir, true)
-      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
-      ItermDirectoryProfile.any_instance.stubs(:write_config)
-      Array.any_instance.stubs(:sample).returns("Solarized Dark")
-
-      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
-
-      marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.expects(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
-
-      create_instance(
-        path: "/tmp/project",
-        git_branch_output: ["", "fatal: not a git repository", failure_status],
-        existing_profiles_content: nil
-      ).run
-    end
-
-    it "activates profile after creation" do
-      stub_directory_exists(dynamic_profiles_dir, true)
-      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
-      ItermDirectoryProfile.any_instance.stubs(:write_config)
-      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
-      Array.any_instance.stubs(:sample).returns("Solarized Dark")
-
-      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
-
-      marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
-      File.stubs(:exist?).with(marker_file_path).returns(true)
-
-      stdout = StringIO.new
-      instance = create_instance(
-        path: "/tmp/project",
-        git_branch_output: ["", "fatal: not a git repository", failure_status],
-        existing_profiles_content: nil,
-        stdout: stdout
-      )
-      instance.expects(:system).with("it2profile", "-s", "Directory: /tmp/project").returns(true)
-
-      instance.run
-
-      output = stdout.string
-      assert(output.include?("Profile 'Directory: /tmp/project' created successfully!"))
-    end
-
-    it "warns about shell integration when not installed" do
-      stub_directory_exists(dynamic_profiles_dir, true)
-      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
-      ItermDirectoryProfile.any_instance.stubs(:write_config)
-      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(false)
-      Array.any_instance.stubs(:sample).returns("Solarized Dark")
-
-      File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
-
-      marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Directory: /tmp/project").returns(18)
-
-      stderr = StringIO.new
-      instance = create_instance(
-        path: "/tmp/project",
-        git_branch_output: ["", "fatal: not a git repository", failure_status],
-        existing_profiles_content: nil,
-        stderr: stderr
-      )
-      instance.expects(:system).never
-
-      instance.run
-
-      output = stderr.string
-      assert(output.include?("Note: Profile 'Directory: /tmp/project' created successfully!"))
-      assert(output.include?("To enable automatic profile switching:"))
-      assert(output.include?("1. Install iTerm2 Shell Integration: iTerm2 > Install Shell Integration"))
-      assert(output.include?("--generate-shell-integration >> ~/.zshrc"))
-      assert(output.include?("3. Restart your shell or run: source ~/.zshrc"))
-    end
-  end
-
   describe "CLI" do
     before do
       stub_config_file_operations
-    end
-
-    it "handles --generate-shell-integration flag" do
-      output = StringIO.new
-      exit_code = ItermDirectoryProfile.run_cli(["--generate-shell-integration"], stdout: output)
-
-      shell_code = output.string
-
-      assert_equal(0, exit_code, "CLI should exit successfully")
-      assert_shell_integration_valid(shell_code)
     end
 
     it "handles errors gracefully" do
@@ -923,18 +823,12 @@ describe ItermDirectoryProfile do
     it "handles --preset option" do
       stub_directory_exists(dynamic_profiles_dir, true)
       ItermDirectoryProfile.any_instance.unstub(:write_config)
-      ItermDirectoryProfile.any_instance.unstub(:write_profile_marker)
-      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
 
       config_dir = File.expand_path("~/.config")
       config_file = File.expand_path("~/.config/iterm_directory_profile.json")
       stub_directory_exists(config_dir, true)
       File.stubs(:exist?).with(config_file).returns(false)
       File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
-
-      marker_file_path = File.join("/tmp/test-path", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, anything).returns(18)
-      File.stubs(:exist?).with(marker_file_path).returns(true)
 
       all_presets = {
         "Solarized Dark" => {},
@@ -1018,7 +912,6 @@ describe ItermDirectoryProfile do
   def stub_config_file_operations
     ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
     ItermDirectoryProfile.any_instance.stubs(:write_config)
-    ItermDirectoryProfile.any_instance.stubs(:write_profile_marker)
     Array.any_instance.stubs(:sample).returns("Solarized Dark")
   end
 
@@ -1137,13 +1030,6 @@ describe ItermDirectoryProfile do
     assert_valid_guid_format(profile_data["Guid"])
     assert(profile_data["Name"].include?(directory_name), "Profile name should include directory name '#{directory_name}'")
     assert_equal(directory_name, profile_data["Badge Text"])
-  end
-
-  def assert_shell_integration_valid(shell_code)
-    assert(shell_code.include?("function"), "Shell code should include function definition")
-    assert(shell_code.include?("it2profile"), "Shell code should include it2profile command")
-    assert(shell_code.include?(".iterm_profile"), "Shell code should reference .iterm_profile marker file")
-    assert(shell_code.include?("cat"), "Shell code should read marker file contents")
   end
 
   def assert_cli_success(exit_code, output)

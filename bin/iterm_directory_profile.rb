@@ -22,7 +22,6 @@ class ItermDirectoryProfile
   CONFIG_FILE = File.join(CONFIG_DIR, "iterm_directory_profile.json")
   DYNAMIC_PROFILES_DIR = File.expand_path("~/Library/Application Support/iTerm2/DynamicProfiles")
   DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, "directories.json")
-  PROFILE_MARKER_PATH = ".iterm_profile"
 
   def initialize(
     preset_name: nil,
@@ -74,35 +73,10 @@ class ItermDirectoryProfile
     config[display_name] = preset
     write_config(config)
 
-    write_profile_marker(profile["Name"])
-    activate_profile(profile["Name"])
-
-    check_shell_integration_setup(display_name)
+    @stdout.puts "Profile '#{profile["Name"]}' created successfully!"
   end
 
   class << self
-    def generate_shell_integration_code
-      <<~SHELL
-        # iTerm2 directory profile switching
-        function iterm_set_directory_profile() {
-          local marker_file=".iterm_profile"
-          if [[ -f "$marker_file" ]]; then
-            local profile_name=$(cat "$marker_file")
-            it2profile -s "$profile_name"
-          fi
-        }
-
-        # Hook to run on directory change
-        function chpwd_iterm_directory() {
-          iterm_set_directory_profile
-        }
-        chpwd_functions+=(chpwd_iterm_directory)
-
-        # Run on shell load
-        iterm_set_directory_profile
-      SHELL
-    end
-
     def clear_all_profiles
       File.delete(DYNAMIC_PROFILES_FILE) if File.exist?(DYNAMIC_PROFILES_FILE)
       File.delete(CONFIG_FILE) if File.exist?(CONFIG_FILE)
@@ -110,7 +84,6 @@ class ItermDirectoryProfile
 
     def run_cli(argv, stdout: $stdout, stderr: $stderr)
       options = {}
-      generate_shell_integration = false
       clear_all = false
 
       OptionParser.new do |opts|
@@ -118,10 +91,6 @@ class ItermDirectoryProfile
 
         opts.on("-p", "--preset PRESET_NAME", "Color preset to use (default: saved config or random selection)") do |preset|
           options[:preset_name] = preset
-        end
-
-        opts.on("-g", "--generate-shell-integration", "Generate shell integration code") do
-          generate_shell_integration = true
         end
 
         opts.on("-c", "--clear-all", "Clear all directory profiles") do
@@ -133,11 +102,6 @@ class ItermDirectoryProfile
           return 0
         end
       end.parse!(argv)
-
-      if generate_shell_integration
-        stdout.puts generate_shell_integration_code
-        return 0
-      end
 
       if clear_all
         clear_all_profiles
@@ -220,18 +184,6 @@ class ItermDirectoryProfile
     File.write(CONFIG_FILE, JSON.pretty_generate(config))
   end
 
-  def write_profile_marker(profile_name)
-    marker_file = File.join(@path, PROFILE_MARKER_PATH)
-    File.write(marker_file, profile_name)
-  end
-
-  def activate_profile(profile_name)
-    marker_file = File.join(@path, PROFILE_MARKER_PATH)
-    return unless File.exist?(marker_file)
-
-    system("it2profile", "-s", profile_name)
-  end
-
   def ensure_config_directory_exists!
     return if File.directory?(CONFIG_DIR)
 
@@ -248,6 +200,7 @@ class ItermDirectoryProfile
       "Name" => profile_name,
       "Guid" => guid,
       "Badge Text" => badge_text,
+      "Bound Hosts" => [@path],
       "Use Separate Colors for Light and Dark Mode" => false,
       "Rewritable" => true,
     }
@@ -359,29 +312,6 @@ class ItermDirectoryProfile
     return if File.directory?(DYNAMIC_PROFILES_DIR)
 
     FileUtils.mkdir_p(DYNAMIC_PROFILES_DIR)
-  end
-
-  def check_shell_integration_setup(directory_name)
-    profile_name = "Directory: #{directory_name}"
-
-    unless shell_integration_installed?
-      @stderr.puts(<<~MESSAGE)
-
-        Note: Profile '#{profile_name}' created successfully!
-
-        To enable automatic profile switching:
-          1. Install iTerm2 Shell Integration: iTerm2 > Install Shell Integration
-          2. Run: #{File.expand_path(__FILE__)} --generate-shell-integration >> ~/.zshrc
-          3. Restart your shell or run: source ~/.zshrc
-      MESSAGE
-      return
-    end
-
-    @stdout.puts("Profile '#{profile_name}' created successfully!")
-  end
-
-  def shell_integration_installed?
-    system("zsh", "-c", "type iterm_set_directory_profile", out: File::NULL, err: File::NULL)
   end
 
   def detect_current_directory
