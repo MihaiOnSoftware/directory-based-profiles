@@ -6,7 +6,7 @@ require "fileutils"
 require "open3"
 require "digest"
 
-class ItermWorktreeProfile
+class ItermDirectoryProfile
   PREFERRED_PRESETS = [
     "Solarized Dark",
     "Tango Dark",
@@ -19,9 +19,9 @@ class ItermWorktreeProfile
   ITERM_PREFS_PATH = File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist")
   COLOR_PRESETS_PATH = "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist"
   CONFIG_DIR = File.expand_path("~/.config")
-  CONFIG_FILE = File.join(CONFIG_DIR, "iterm_worktree_profile.json")
+  CONFIG_FILE = File.join(CONFIG_DIR, "iterm_directory_profile.json")
   DYNAMIC_PROFILES_DIR = File.expand_path("~/Library/Application Support/iTerm2/DynamicProfiles")
-  DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, "worktrees.json")
+  DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, "directories.json")
   PROFILE_MARKER_PATH = ".iterm_profile"
 
   def initialize(
@@ -30,7 +30,7 @@ class ItermWorktreeProfile
     default_guid_output:,
     bookmarks_output:,
     color_presets_output:,
-    worktree_path_output:,
+    directory_path_output:,
     config_file_content:,
     existing_profiles_content:,
     stdout: $stdout,
@@ -41,20 +41,20 @@ class ItermWorktreeProfile
     @default_guid_output = default_guid_output
     @bookmarks_output = bookmarks_output
     @color_presets_output = color_presets_output
-    @worktree_path_output = worktree_path_output
+    @directory_path_output = directory_path_output
     @config_file_content = config_file_content
     @existing_profiles_content = existing_profiles_content
     @stdout = stdout
     @stderr = stderr
 
-    @path ||= detect_current_worktree if path.nil?
+    @path ||= detect_current_directory if path.nil?
   end
 
   def run
-    worktree_name = extract_worktree_name(@path)
+    directory_name = extract_directory_name(@path)
     config = read_config
 
-    config_preset = config[worktree_name]
+    config_preset = config[directory_name]
     preset = if config_preset && @preset_name.nil?
       config_preset
     elsif !config_preset && @preset_name.nil?
@@ -69,20 +69,20 @@ class ItermWorktreeProfile
     merged_profile = merge_profiles(profile, default_profile, color_preset)
     write_dynamic_profile(merged_profile)
 
-    config[worktree_name] = preset
+    config[directory_name] = preset
     write_config(config)
 
     write_profile_marker(profile["Name"])
     activate_profile(profile["Name"])
 
-    check_shell_integration_setup(worktree_name)
+    check_shell_integration_setup(directory_name)
   end
 
   class << self
     def generate_shell_integration_code
       <<~SHELL
-        # iTerm2 worktree profile switching
-        function iterm_set_worktree_profile() {
+        # iTerm2 directory profile switching
+        function iterm_set_directory_profile() {
           local marker_file=".iterm_profile"
           if [[ -f "$marker_file" ]]; then
             local profile_name=$(cat "$marker_file")
@@ -91,13 +91,13 @@ class ItermWorktreeProfile
         }
 
         # Hook to run on directory change
-        function chpwd_iterm_worktree() {
-          iterm_set_worktree_profile
+        function chpwd_iterm_directory() {
+          iterm_set_directory_profile
         }
-        chpwd_functions+=(chpwd_iterm_worktree)
+        chpwd_functions+=(chpwd_iterm_directory)
 
         # Run on shell load
-        iterm_set_worktree_profile
+        iterm_set_directory_profile
       SHELL
     end
 
@@ -112,7 +112,7 @@ class ItermWorktreeProfile
       clear_all = false
 
       OptionParser.new do |opts|
-        opts.banner = "Usage: iterm_worktree_profile.rb [options] [path]"
+        opts.banner = "Usage: iterm_directory_profile.rb [options] [path]"
 
         opts.on("-p", "--preset PRESET_NAME", "Color preset to use (default: saved config or random selection)") do |preset|
           options[:preset_name] = preset
@@ -122,7 +122,7 @@ class ItermWorktreeProfile
           generate_shell_integration = true
         end
 
-        opts.on("-c", "--clear-all", "Clear all worktree profiles") do
+        opts.on("-c", "--clear-all", "Clear all directory profiles") do
           clear_all = true
         end
 
@@ -139,7 +139,7 @@ class ItermWorktreeProfile
 
       if clear_all
         clear_all_profiles
-        stdout.puts "All worktree profiles cleared"
+        stdout.puts "All directory profiles cleared"
         return 0
       end
 
@@ -149,7 +149,7 @@ class ItermWorktreeProfile
         default_guid_output: fetch_default_guid_output,
         bookmarks_output: fetch_bookmarks_output,
         color_presets_output: fetch_color_presets_output,
-        worktree_path_output: fetch_worktree_path_output,
+        directory_path_output: fetch_directory_path_output,
         config_file_content: fetch_config_file_content,
         existing_profiles_content: fetch_existing_profiles_content,
       }
@@ -182,8 +182,8 @@ class ItermWorktreeProfile
       Open3.capture3("plutil -convert json -o - #{COLOR_PRESETS_PATH}")
     end
 
-    def fetch_worktree_path_output
-      Open3.capture3("git", "rev-parse", "--show-toplevel")
+    def fetch_directory_path_output
+      Dir.pwd
     end
 
     def fetch_config_file_content
@@ -232,10 +232,10 @@ class ItermWorktreeProfile
   end
 
   def generate_minimal_profile
-    worktree_name = extract_worktree_name(@path)
-    profile_name = "Worktree: #{worktree_name}"
-    badge_text = worktree_name
-    guid = generate_stable_guid(worktree_name)
+    directory_name = extract_directory_name(@path)
+    profile_name = "Directory: #{directory_name}"
+    badge_text = directory_name
+    guid = generate_stable_guid(directory_name)
 
     {
       "Name" => profile_name,
@@ -246,15 +246,12 @@ class ItermWorktreeProfile
     }
   end
 
-  def generate_stable_guid(worktree_name)
-    hash = Digest::SHA256.hexdigest(worktree_name)
+  def generate_stable_guid(directory_name)
+    hash = Digest::SHA256.hexdigest(directory_name)
     "#{hash[0..7]}-#{hash[8..11]}-#{hash[12..15]}-#{hash[16..19]}-#{hash[20..31]}".upcase
   end
 
-  def extract_worktree_name(path)
-    match = path.match(%r{/trees/([^/]+)/})
-    return match[1] if match
-
+  def extract_directory_name(path)
     File.basename(path)
   end
 
@@ -351,8 +348,8 @@ class ItermWorktreeProfile
     FileUtils.mkdir_p(DYNAMIC_PROFILES_DIR)
   end
 
-  def check_shell_integration_setup(worktree_name)
-    profile_name = "Worktree: #{worktree_name}"
+  def check_shell_integration_setup(directory_name)
+    profile_name = "Directory: #{directory_name}"
 
     unless shell_integration_installed?
       @stderr.puts(<<~MESSAGE)
@@ -371,21 +368,15 @@ class ItermWorktreeProfile
   end
 
   def shell_integration_installed?
-    system("zsh", "-c", "type iterm_set_worktree_profile", out: File::NULL, err: File::NULL)
+    system("zsh", "-c", "type iterm_set_directory_profile", out: File::NULL, err: File::NULL)
   end
 
-  def detect_current_worktree
-    stdout, _stderr, status = @worktree_path_output
-
-    unless status.success?
-      raise StandardError, "not in a git worktree"
-    end
-
-    stdout.strip
+  def detect_current_directory
+    @directory_path_output || Dir.pwd
   end
 end
 
 if __FILE__ == $PROGRAM_NAME
   require "optparse"
-  exit(ItermWorktreeProfile.run_cli(ARGV))
+  exit(ItermDirectoryProfile.run_cli(ARGV))
 end

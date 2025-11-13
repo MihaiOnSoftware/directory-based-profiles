@@ -2,11 +2,11 @@
 # frozen_string_literal: true
 
 require_relative "test_helper"
-require_relative "../bin/iterm_worktree_profile.rb"
+require_relative "../bin/iterm_directory_profile.rb"
 
-describe ItermWorktreeProfile do
+describe ItermDirectoryProfile do
   let(:dynamic_profiles_dir) { File.expand_path("~/Library/Application Support/iTerm2/DynamicProfiles") }
-  let(:dynamic_profiles_file) { File.join(dynamic_profiles_dir, "worktrees.json") }
+  let(:dynamic_profiles_file) { File.join(dynamic_profiles_dir, "directories.json") }
   let(:iterm_prefs_path) { File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist") }
 
   let(:success_status) do
@@ -38,7 +38,7 @@ describe ItermWorktreeProfile do
     end.returns(100)
     File.stubs(:directory?).raises("Unmocked File.directory? call")
     FileUtils.stubs(:mkdir_p).raises("Unmocked FileUtils.mkdir_p call")
-    ItermWorktreeProfile.any_instance.stubs(:system).returns(true)
+    ItermDirectoryProfile.any_instance.stubs(:system).returns(true)
   end
 
   describe "basic profile creation" do
@@ -67,7 +67,7 @@ describe ItermWorktreeProfile do
 
       expected_guid = generate_expected_guid("project")
       expected_profile = {
-        "Name" => "Worktree: project",
+        "Name" => "Directory: project",
         "Guid" => expected_guid,
         "Badge Text" => "project",
         "Use Separate Colors for Light and Dark Mode" => false,
@@ -129,7 +129,7 @@ describe ItermWorktreeProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert(profile["Name"].start_with?("Worktree: "), "Profile name should start with 'Worktree: '")
+      assert(profile["Name"].start_with?("Directory: "), "Profile name should start with 'Directory: '")
       assert_valid_guid_format(profile["Guid"])
       assert_profile_inherits_properties(profile, {
         "Columns" => 120,
@@ -174,7 +174,7 @@ describe ItermWorktreeProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert(profile["Name"].start_with?("Worktree: "), "Profile name should start with 'Worktree: '")
+      assert(profile["Name"].start_with?("Directory: "), "Profile name should start with 'Directory: '")
       assert_valid_guid_format(profile["Guid"])
       assert_profile_has_new_guid_and_name(profile, "DEFAULT-123")
       assert_profile_properties(profile, {
@@ -395,12 +395,12 @@ describe ItermWorktreeProfile do
       stub_config_file_operations
 
       create_instance(
-        path: "/Users/test/world/trees/myworktree/src",
+        path: "/Users/test/myworktree",
         existing_profiles_content: nil,
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_worktree_profile(profile, "myworktree")
+      assert_valid_directory_profile(profile, "myworktree")
     end
 
     it "uses basename when path does not match trees pattern for both profile name and badge text" do
@@ -413,7 +413,7 @@ describe ItermWorktreeProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_worktree_profile(profile, "src")
+      assert_valid_directory_profile(profile, "src")
     end
   end
 
@@ -448,14 +448,14 @@ describe ItermWorktreeProfile do
       stub_config_file_operations
 
       create_instance(
-        path: "/Users/test/trees/worktree1/src",
+        path: "/Users/test/directory1",
         existing_profiles_content: nil,
       ).run
 
       first_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
 
       create_instance(
-        path: "/Users/test/trees/worktree2/src",
+        path: "/Users/test/directory2",
         existing_profiles_content: nil,
       ).run
 
@@ -467,7 +467,7 @@ describe ItermWorktreeProfile do
 
   describe "shell integration" do
     it "generates shell integration code with profile switching logic" do
-      shell_code = ItermWorktreeProfile.generate_shell_integration_code
+      shell_code = ItermDirectoryProfile.generate_shell_integration_code
 
       assert_shell_integration_valid(shell_code)
     end
@@ -483,28 +483,19 @@ describe ItermWorktreeProfile do
       stub_config_file_operations
 
       create_instance(
-        worktree_path_output: ["/Users/test/world/trees/myworktree/src\n", "", success_status],
+        directory_path_output: "/Users/test/myworktree",
         existing_profiles_content: nil,
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_valid_worktree_profile(profile, "myworktree")
+      assert_valid_directory_profile(profile, "myworktree")
     end
 
-    it "raises error when not in a worktree" do
-      setup_basic_directory
-
-      assert_raises_with_message(StandardError, /not in a git worktree/) do
-        create_instance(
-          worktree_path_output: ["", "fatal: not a git repository", failure_status],
-        ).run
-      end
-    end
   end
 
   describe "preset configuration" do
     let(:config_dir) { File.expand_path("~/.config") }
-    let(:config_file) { File.join(config_dir, "iterm_worktree_profile.json") }
+    let(:config_file) { File.join(config_dir, "iterm_directory_profile.json") }
 
     def stub_profile_operations_without_config
       expect_default_guid("DEFAULT-GUID")
@@ -534,7 +525,7 @@ describe ItermWorktreeProfile do
       stub_directory_exists(config_dir, true)
 
       config_data = { "testworktree" => "Tango Dark" }
-      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      ItermDirectoryProfile.any_instance.stubs(:write_config)
 
       preset_data = { "Background Color" => { "Red Component" => 0.5 } }
       presets_with_data = default_io_results[:color_presets_output][0]
@@ -543,7 +534,7 @@ describe ItermWorktreeProfile do
 
       create_instance(
         preset_name: nil,
-        path: "/Users/test/trees/testworktree/src",
+        path: "/Users/test/testworktree",
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), "", success_status],
@@ -574,7 +565,7 @@ describe ItermWorktreeProfile do
       config_data = { "explicitworktree" => "Old Preset" }
 
       written_config = nil
-      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+      ItermDirectoryProfile.any_instance.stubs(:write_config).tap do |stub|
         stub.with do |config|
           written_config = JSON.pretty_generate(config)
           true
@@ -588,7 +579,7 @@ describe ItermWorktreeProfile do
 
       create_instance(
         preset_name: "Smoooooth",
-        path: "/Users/test/trees/explicitworktree/src",
+        path: "/Users/test/explicitworktree",
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), "", success_status],
@@ -657,7 +648,7 @@ describe ItermWorktreeProfile do
       stub_directory_exists(config_dir, true)
 
       config_data = { "worktree1" => "Tango Dark" }
-      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      ItermDirectoryProfile.any_instance.stubs(:write_config)
 
       create_instance(
         path: "/Users/test/trees/worktree1/src",
@@ -671,7 +662,7 @@ describe ItermWorktreeProfile do
       stub_directory_exists(config_dir, true)
 
       written_config = nil
-      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+      ItermDirectoryProfile.any_instance.stubs(:write_config).tap do |stub|
         stub.with do |config|
           written_config = JSON.pretty_generate(config)
           true
@@ -679,7 +670,7 @@ describe ItermWorktreeProfile do
       end
 
       create_instance(
-        path: "/Users/test/trees/worktree2/src",
+        path: "/Users/test/worktree2",
         preset_name: "Tango Dark",
         config_file_content: nil,
         existing_profiles_content: nil,
@@ -711,7 +702,7 @@ describe ItermWorktreeProfile do
       config_data = { "worktree5" => "Old Preset" }
 
       written_config = nil
-      ItermWorktreeProfile.any_instance.stubs(:write_config).tap do |stub|
+      ItermDirectoryProfile.any_instance.stubs(:write_config).tap do |stub|
         stub.with do |config|
           written_config = JSON.pretty_generate(config)
           true
@@ -719,7 +710,7 @@ describe ItermWorktreeProfile do
       end
 
       create_instance(
-        path: "/Users/test/trees/worktree5/src",
+        path: "/Users/test/worktree5",
         preset_name: "New Preset",
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
@@ -733,52 +724,52 @@ describe ItermWorktreeProfile do
   describe "profile marker file" do
     it "writes profile marker file with profile name" do
       stub_directory_exists(dynamic_profiles_dir, true)
-      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
-      ItermWorktreeProfile.any_instance.stubs(:write_config)
+      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
+      ItermDirectoryProfile.any_instance.stubs(:write_config)
       Array.any_instance.stubs(:sample).returns("Solarized Dark")
 
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.expects(:write).with(marker_file_path, "Worktree: project").returns(18)
+      File.expects(:write).with(marker_file_path, "Directory: project").returns(18)
 
       create_instance(path: "/tmp/project", existing_profiles_content: nil).run
     end
 
     it "activates profile after creation" do
       stub_directory_exists(dynamic_profiles_dir, true)
-      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
-      ItermWorktreeProfile.any_instance.stubs(:write_config)
-      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
+      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
+      ItermDirectoryProfile.any_instance.stubs(:write_config)
+      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
       Array.any_instance.stubs(:sample).returns("Solarized Dark")
 
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Worktree: project").returns(18)
+      File.stubs(:write).with(marker_file_path, "Directory: project").returns(18)
       File.stubs(:exist?).with(marker_file_path).returns(true)
 
       stdout = StringIO.new
       instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stdout: stdout)
-      instance.expects(:system).with("it2profile", "-s", "Worktree: project").returns(true)
+      instance.expects(:system).with("it2profile", "-s", "Directory: project").returns(true)
 
       instance.run
 
       output = stdout.string
-      assert(output.include?("Profile 'Worktree: project' created successfully!"))
+      assert(output.include?("Profile 'Directory: project' created successfully!"))
     end
 
     it "warns about shell integration when not installed" do
       stub_directory_exists(dynamic_profiles_dir, true)
-      ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
-      ItermWorktreeProfile.any_instance.stubs(:write_config)
-      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(false)
+      ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
+      ItermDirectoryProfile.any_instance.stubs(:write_config)
+      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(false)
       Array.any_instance.stubs(:sample).returns("Solarized Dark")
 
       File.stubs(:write).with(dynamic_profiles_file, anything).returns(100)
 
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
-      File.stubs(:write).with(marker_file_path, "Worktree: project").returns(18)
+      File.stubs(:write).with(marker_file_path, "Directory: project").returns(18)
 
       stderr = StringIO.new
       instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stderr: stderr)
@@ -787,7 +778,7 @@ describe ItermWorktreeProfile do
       instance.run
 
       output = stderr.string
-      assert(output.include?("Note: Profile 'Worktree: project' created successfully!"))
+      assert(output.include?("Note: Profile 'Directory: project' created successfully!"))
       assert(output.include?("To enable automatic profile switching:"))
       assert(output.include?("1. Install iTerm2 Shell Integration: iTerm2 > Install Shell Integration"))
       assert(output.include?("--generate-shell-integration >> ~/.zshrc"))
@@ -802,7 +793,7 @@ describe ItermWorktreeProfile do
 
     it "handles --generate-shell-integration flag" do
       output = StringIO.new
-      exit_code = ItermWorktreeProfile.run_cli(["--generate-shell-integration"], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli(["--generate-shell-integration"], stdout: output)
 
       shell_code = output.string
 
@@ -813,7 +804,7 @@ describe ItermWorktreeProfile do
     it "handles errors gracefully" do
       stub_directory_exists(dynamic_profiles_dir, true)
 
-      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
       File.stubs(:exist?).with(config_file).returns(false)
       File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
 
@@ -822,26 +813,26 @@ describe ItermWorktreeProfile do
       Open3.stubs(:capture3).returns(["", "PlistBuddy error", failure_status])
 
       output = StringIO.new
-      exit_code = ItermWorktreeProfile.run_cli([], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli([], stdout: output)
 
       assert_cli_error(exit_code, output)
     end
 
     it "handles help flag" do
       output = StringIO.new
-      exit_code = ItermWorktreeProfile.run_cli(["--help"], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli(["--help"], stdout: output)
 
       assert_cli_help(exit_code, output)
     end
 
     it "handles --preset option" do
       stub_directory_exists(dynamic_profiles_dir, true)
-      ItermWorktreeProfile.any_instance.unstub(:write_config)
-      ItermWorktreeProfile.any_instance.unstub(:write_profile_marker)
-      ItermWorktreeProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
+      ItermDirectoryProfile.any_instance.unstub(:write_config)
+      ItermDirectoryProfile.any_instance.unstub(:write_profile_marker)
+      ItermDirectoryProfile.any_instance.stubs(:shell_integration_installed?).returns(true)
 
       config_dir = File.expand_path("~/.config")
-      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
       stub_directory_exists(config_dir, true)
       File.stubs(:exist?).with(config_file).returns(false)
       File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
@@ -858,12 +849,12 @@ describe ItermWorktreeProfile do
 
       require "open3"
       Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", anything).returns(["DEFAULT-GUID\n", "", success_status])
-      Open3.stubs(:capture3).with("plutil -convert json -o - #{ItermWorktreeProfile::COLOR_PRESETS_PATH}").returns([JSON.generate(all_presets), "", success_status])
-      Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ItermWorktreeProfile::ITERM_PREFS_PATH} | plutil -convert json -o - -").returns([JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status])
+      Open3.stubs(:capture3).with("plutil -convert json -o - #{ItermDirectoryProfile::COLOR_PRESETS_PATH}").returns([JSON.generate(all_presets), "", success_status])
+      Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ItermDirectoryProfile::ITERM_PREFS_PATH} | plutil -convert json -o - -").returns([JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status])
       Open3.stubs(:capture3).with("git", "rev-parse", "--show-toplevel").returns(["/tmp/test-path", "", success_status])
 
       output = StringIO.new
-      exit_code = ItermWorktreeProfile.run_cli(["--preset", "Tango Dark", "/tmp/test-path"], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli(["--preset", "Tango Dark", "/tmp/test-path"], stdout: output)
 
       assert_equal(0, exit_code)
       assert_match(/Profile.*created successfully/, output.string)
@@ -880,14 +871,14 @@ describe ItermWorktreeProfile do
       File.expects(:exist?).with(dynamic_profiles_file).returns(true)
       File.expects(:delete).with(dynamic_profiles_file)
 
-      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
       File.expects(:exist?).with(config_file).returns(true)
       File.expects(:delete).with(config_file)
 
-      exit_code = ItermWorktreeProfile.run_cli(["--clear-all"], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli(["--clear-all"], stdout: output)
 
       assert_equal(0, exit_code, "CLI should exit successfully")
-      assert_match(/All worktree profiles cleared/, output.string)
+      assert_match(/All directory profiles cleared/, output.string)
     end
 
     it "handles --clear-all when files don't exist" do
@@ -896,14 +887,14 @@ describe ItermWorktreeProfile do
       File.expects(:exist?).with(dynamic_profiles_file).returns(false)
       File.expects(:delete).with(dynamic_profiles_file).never
 
-      config_file = File.expand_path("~/.config/iterm_worktree_profile.json")
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
       File.expects(:exist?).with(config_file).returns(false)
       File.expects(:delete).with(config_file).never
 
-      exit_code = ItermWorktreeProfile.run_cli(["--clear-all"], stdout: output)
+      exit_code = ItermDirectoryProfile.run_cli(["--clear-all"], stdout: output)
 
       assert_equal(0, exit_code, "CLI should exit successfully")
-      assert_match(/All worktree profiles cleared/, output.string)
+      assert_match(/All directory profiles cleared/, output.string)
     end
   end
 
@@ -930,9 +921,9 @@ describe ItermWorktreeProfile do
   end
 
   def stub_config_file_operations
-    ItermWorktreeProfile.any_instance.stubs(:read_config).returns({})
-    ItermWorktreeProfile.any_instance.stubs(:write_config)
-    ItermWorktreeProfile.any_instance.stubs(:write_profile_marker)
+    ItermDirectoryProfile.any_instance.stubs(:read_config).returns({})
+    ItermDirectoryProfile.any_instance.stubs(:write_config)
+    ItermDirectoryProfile.any_instance.stubs(:write_profile_marker)
     Array.any_instance.stubs(:sample).returns("Solarized Dark")
   end
 
@@ -1047,7 +1038,7 @@ describe ItermWorktreeProfile do
       .returns([JSON.generate(plist_data), "", success_status])
   end
 
-  def assert_valid_worktree_profile(profile_data, worktree_name)
+  def assert_valid_directory_profile(profile_data, worktree_name)
     assert_valid_guid_format(profile_data["Guid"])
     assert(profile_data["Name"].include?(worktree_name), "Profile name should include worktree name '#{worktree_name}'")
     assert_equal(worktree_name, profile_data["Badge Text"])
@@ -1099,14 +1090,14 @@ describe ItermWorktreeProfile do
       default_guid_output: ["DEFAULT-GUID\n", "", success_status],
       bookmarks_output: [JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status],
       color_presets_output: [JSON.generate(all_presets), "", success_status],
-      worktree_path_output: ["/tmp/test_worktree", "", success_status],
+      directory_path_output: "/tmp/test_directory",
       config_file_content: "{}",
       existing_profiles_content: nil,
     }
   end
 
   def create_instance(**overrides)
-    ItermWorktreeProfile.new(**default_io_results.merge(overrides))
+    ItermDirectoryProfile.new(**default_io_results.merge(overrides))
   end
 
   def stub_default_profile
