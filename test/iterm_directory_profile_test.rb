@@ -501,7 +501,7 @@ describe ItermDirectoryProfile do
       stub_config_file_operations
     end
 
-    it "uses git branch name for profile name and badge when git is available" do
+    it "uses path for profile name and branch name for badge when git is available" do
       stub_directory_exists(dynamic_profiles_dir, true)
 
       create_instance(
@@ -511,7 +511,7 @@ describe ItermDirectoryProfile do
       ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
-      assert_equal("Directory: feature/awesome-feature", profile["Name"])
+      assert_equal("Directory: /Users/test/myproject", profile["Name"])
       assert_equal("feature/awesome-feature", profile["Badge Text"])
     end
 
@@ -529,7 +529,7 @@ describe ItermDirectoryProfile do
       assert_equal("/Users/test/myproject", profile["Badge Text"])
     end
 
-    it "uses branch name for GUID generation for stability" do
+    it "generates different GUIDs for different paths even on same branch" do
       stub_directory_exists(dynamic_profiles_dir, true)
 
       create_instance(
@@ -548,7 +548,7 @@ describe ItermDirectoryProfile do
 
       second_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
 
-      assert_equal(first_guid, second_guid, "Same branch name should generate same GUID regardless of directory")
+      refute_equal(first_guid, second_guid, "Different paths should generate different GUIDs even on same branch")
     end
   end
 

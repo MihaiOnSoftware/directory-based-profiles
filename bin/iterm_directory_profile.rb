@@ -55,7 +55,7 @@ class ItermDirectoryProfile
     display_name = get_display_name
     config = read_config
 
-    config_preset = config[display_name]
+    config_preset = config[@path]
     preset = if config_preset && @preset_name.nil?
       config_preset
     elsif !config_preset && @preset_name.nil?
@@ -70,7 +70,7 @@ class ItermDirectoryProfile
     merged_profile = merge_profiles(profile, default_profile, color_preset)
     write_dynamic_profile(merged_profile)
 
-    config[display_name] = preset
+    config[@path] = preset
     write_config(config)
 
     @stdout.puts "Profile '#{profile["Name"]}' created successfully!"
@@ -192,9 +192,9 @@ class ItermDirectoryProfile
 
   def generate_minimal_profile
     display_name = get_display_name
-    profile_name = "Directory: #{display_name}"
+    profile_name = "Directory: #{@path}"
     badge_text = display_name
-    guid = generate_stable_guid(display_name)
+    guid = generate_stable_guid(@path)
 
     {
       "Name" => profile_name,
