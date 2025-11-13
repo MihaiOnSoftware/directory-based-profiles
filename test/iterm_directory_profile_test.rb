@@ -1038,10 +1038,10 @@ describe ItermDirectoryProfile do
       .returns([JSON.generate(plist_data), "", success_status])
   end
 
-  def assert_valid_directory_profile(profile_data, worktree_name)
+  def assert_valid_directory_profile(profile_data, directory_name)
     assert_valid_guid_format(profile_data["Guid"])
-    assert(profile_data["Name"].include?(worktree_name), "Profile name should include worktree name '#{worktree_name}'")
-    assert_equal(worktree_name, profile_data["Badge Text"])
+    assert(profile_data["Name"].include?(directory_name), "Profile name should include directory name '#{directory_name}'")
+    assert_equal(directory_name, profile_data["Badge Text"])
   end
 
   def assert_shell_integration_valid(shell_code)
