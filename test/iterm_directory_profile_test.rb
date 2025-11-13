@@ -61,7 +61,11 @@ describe ItermDirectoryProfile do
     end
 
     it "writes profile with required fields and correct structure" do
-      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+      create_instance(
+        path: "/tmp/project",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        existing_profiles_content: nil
+      ).run
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
 
@@ -229,11 +233,12 @@ describe ItermDirectoryProfile do
       error = assert_raises(StandardError) do
         create_instance(
           path: "/tmp/project",
+          git_branch_output: ["", "fatal: not a git repository", failure_status],
           default_guid_output: ["TEST-GUID\n", "", success_status],
           bookmarks_output: ["invalid json", "", success_status],
         ).run
       end
-      assert(error.message.include?("unexpected character"))
+      assert(error.message.include?("unexpected token"))
     end
   end
 
@@ -396,6 +401,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/myworktree",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         existing_profiles_content: nil,
       ).run
 
@@ -409,6 +415,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/myproject/src",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         existing_profiles_content: nil,
       ).run
 
@@ -449,6 +456,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/directory1",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         existing_profiles_content: nil,
       ).run
 
@@ -456,6 +464,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/directory2",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         existing_profiles_content: nil,
       ).run
 
@@ -484,6 +493,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         directory_path_output: "/Users/test/myworktree",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         existing_profiles_content: nil,
       ).run
 
@@ -491,6 +501,62 @@ describe ItermDirectoryProfile do
       assert_valid_directory_profile(profile, "myworktree")
     end
 
+  end
+
+  describe "git branch naming" do
+    before do
+      stub_config_file_operations
+    end
+
+    it "uses git branch name for profile name and badge when git is available" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      create_instance(
+        path: "/Users/test/myproject",
+        git_branch_output: ["feature/awesome-feature\n", "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_equal("Directory: feature/awesome-feature", profile["Name"])
+      assert_equal("feature/awesome-feature", profile["Badge Text"])
+    end
+
+    it "falls back to directory name when git branch command fails" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      create_instance(
+        path: "/Users/test/myproject",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        existing_profiles_content: nil,
+      ).run
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]
+      assert_equal("Directory: myproject", profile["Name"])
+      assert_equal("myproject", profile["Badge Text"])
+    end
+
+    it "uses branch name for GUID generation for stability" do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      create_instance(
+        path: "/Users/test/project1",
+        git_branch_output: ["feature-branch\n", "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      first_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      create_instance(
+        path: "/Users/test/project2",
+        git_branch_output: ["feature-branch\n", "", success_status],
+        existing_profiles_content: nil,
+      ).run
+
+      second_guid = JSON.parse(@written_files[dynamic_profiles_file])["Profiles"][0]["Guid"]
+
+      assert_equal(first_guid, second_guid, "Same branch name should generate same GUID regardless of directory")
+    end
   end
 
   describe "preset configuration" do
@@ -513,7 +579,12 @@ describe ItermDirectoryProfile do
 
       Array.any_instance.stubs(:sample).returns("Smoooooth")
 
-      create_instance(path: "/tmp/project", config_file_content: nil, existing_profiles_content: nil).run
+      create_instance(
+        path: "/tmp/project",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        config_file_content: nil,
+        existing_profiles_content: nil
+      ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
       worktree_name = "project"
@@ -535,6 +606,7 @@ describe ItermDirectoryProfile do
       create_instance(
         preset_name: nil,
         path: "/Users/test/testworktree",
+        git_branch_output: ["", "not a git repo", failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), "", success_status],
@@ -551,7 +623,13 @@ describe ItermDirectoryProfile do
 
       Array.any_instance.stubs(:sample).returns("Tango Light")
 
-      create_instance(preset_name: nil, path: "/tmp/randomproject", config_file_content: nil, existing_profiles_content: nil).run
+      create_instance(
+        preset_name: nil,
+        path: "/tmp/randomproject",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        config_file_content: nil,
+        existing_profiles_content: nil
+      ).run
 
       parsed_config = JSON.parse(@written_files[config_file])
       worktree_name = "randomproject"
@@ -580,6 +658,7 @@ describe ItermDirectoryProfile do
       create_instance(
         preset_name: "Smoooooth",
         path: "/Users/test/explicitworktree",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), "", success_status],
@@ -606,6 +685,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/tmp/new_worktree",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         config_file_content: JSON.generate(existing_config),
         existing_profiles_content: nil,
       ).run
@@ -633,6 +713,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/tmp/new_worktree",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         config_file_content: JSON.generate(existing_config),
         existing_profiles_content: nil,
       ).run
@@ -671,6 +752,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/worktree2",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         preset_name: "Tango Dark",
         config_file_content: nil,
         existing_profiles_content: nil,
@@ -711,6 +793,7 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: "/Users/test/worktree5",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
         preset_name: "New Preset",
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
@@ -733,7 +816,11 @@ describe ItermDirectoryProfile do
       marker_file_path = File.join("/tmp/project", ".iterm_profile")
       File.expects(:write).with(marker_file_path, "Directory: project").returns(18)
 
-      create_instance(path: "/tmp/project", existing_profiles_content: nil).run
+      create_instance(
+        path: "/tmp/project",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        existing_profiles_content: nil
+      ).run
     end
 
     it "activates profile after creation" do
@@ -750,7 +837,12 @@ describe ItermDirectoryProfile do
       File.stubs(:exist?).with(marker_file_path).returns(true)
 
       stdout = StringIO.new
-      instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stdout: stdout)
+      instance = create_instance(
+        path: "/tmp/project",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        existing_profiles_content: nil,
+        stdout: stdout
+      )
       instance.expects(:system).with("it2profile", "-s", "Directory: project").returns(true)
 
       instance.run
@@ -772,7 +864,12 @@ describe ItermDirectoryProfile do
       File.stubs(:write).with(marker_file_path, "Directory: project").returns(18)
 
       stderr = StringIO.new
-      instance = create_instance(path: "/tmp/project", existing_profiles_content: nil, stderr: stderr)
+      instance = create_instance(
+        path: "/tmp/project",
+        git_branch_output: ["", "fatal: not a git repository", failure_status],
+        existing_profiles_content: nil,
+        stderr: stderr
+      )
       instance.expects(:system).never
 
       instance.run
@@ -851,7 +948,7 @@ describe ItermDirectoryProfile do
       Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", anything).returns(["DEFAULT-GUID\n", "", success_status])
       Open3.stubs(:capture3).with("plutil -convert json -o - #{ItermDirectoryProfile::COLOR_PRESETS_PATH}").returns([JSON.generate(all_presets), "", success_status])
       Open3.stubs(:capture3).with("/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ItermDirectoryProfile::ITERM_PREFS_PATH} | plutil -convert json -o - -").returns([JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status])
-      Open3.stubs(:capture3).with("git", "rev-parse", "--show-toplevel").returns(["/tmp/test-path", "", success_status])
+      Open3.stubs(:capture3).with("git", "rev-parse", "--abbrev-ref", "HEAD").returns(["", "fatal: not a git repository", failure_status])
 
       output = StringIO.new
       exit_code = ItermDirectoryProfile.run_cli(["--preset", "Tango Dark", "/tmp/test-path"], stdout: output)
@@ -1091,6 +1188,7 @@ describe ItermDirectoryProfile do
       bookmarks_output: [JSON.generate([{ "Guid" => "DEFAULT-GUID" }]), "", success_status],
       color_presets_output: [JSON.generate(all_presets), "", success_status],
       directory_path_output: "/tmp/test_directory",
+      git_branch_output: ["main\n", "", success_status],
       config_file_content: "{}",
       existing_profiles_content: nil,
     }

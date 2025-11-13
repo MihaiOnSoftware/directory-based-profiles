@@ -31,6 +31,7 @@ class ItermDirectoryProfile
     bookmarks_output:,
     color_presets_output:,
     directory_path_output:,
+    git_branch_output:,
     config_file_content:,
     existing_profiles_content:,
     stdout: $stdout,
@@ -42,6 +43,7 @@ class ItermDirectoryProfile
     @bookmarks_output = bookmarks_output
     @color_presets_output = color_presets_output
     @directory_path_output = directory_path_output
+    @git_branch_output = git_branch_output
     @config_file_content = config_file_content
     @existing_profiles_content = existing_profiles_content
     @stdout = stdout
@@ -51,10 +53,10 @@ class ItermDirectoryProfile
   end
 
   def run
-    directory_name = extract_directory_name(@path)
+    display_name = get_display_name
     config = read_config
 
-    config_preset = config[directory_name]
+    config_preset = config[display_name]
     preset = if config_preset && @preset_name.nil?
       config_preset
     elsif !config_preset && @preset_name.nil?
@@ -69,13 +71,13 @@ class ItermDirectoryProfile
     merged_profile = merge_profiles(profile, default_profile, color_preset)
     write_dynamic_profile(merged_profile)
 
-    config[directory_name] = preset
+    config[display_name] = preset
     write_config(config)
 
     write_profile_marker(profile["Name"])
     activate_profile(profile["Name"])
 
-    check_shell_integration_setup(directory_name)
+    check_shell_integration_setup(display_name)
   end
 
   class << self
@@ -150,6 +152,7 @@ class ItermDirectoryProfile
         bookmarks_output: fetch_bookmarks_output,
         color_presets_output: fetch_color_presets_output,
         directory_path_output: fetch_directory_path_output,
+        git_branch_output: fetch_git_branch_output,
         config_file_content: fetch_config_file_content,
         existing_profiles_content: fetch_existing_profiles_content,
       }
@@ -184,6 +187,10 @@ class ItermDirectoryProfile
 
     def fetch_directory_path_output
       Dir.pwd
+    end
+
+    def fetch_git_branch_output
+      Open3.capture3("git", "rev-parse", "--abbrev-ref", "HEAD")
     end
 
     def fetch_config_file_content
@@ -232,10 +239,10 @@ class ItermDirectoryProfile
   end
 
   def generate_minimal_profile
-    directory_name = extract_directory_name(@path)
-    profile_name = "Directory: #{directory_name}"
-    badge_text = directory_name
-    guid = generate_stable_guid(directory_name)
+    display_name = get_display_name
+    profile_name = "Directory: #{display_name}"
+    badge_text = display_name
+    guid = generate_stable_guid(display_name)
 
     {
       "Name" => profile_name,
@@ -253,6 +260,16 @@ class ItermDirectoryProfile
 
   def extract_directory_name(path)
     File.basename(path)
+  end
+
+  def get_display_name
+    stdout, _stderr, status = @git_branch_output
+
+    if status.success? && !stdout.strip.empty?
+      stdout.strip
+    else
+      extract_directory_name(@path)
+    end
   end
 
   def read_default_profile
