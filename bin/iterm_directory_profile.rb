@@ -200,7 +200,7 @@ class ItermDirectoryProfile
       "Name" => profile_name,
       "Guid" => guid,
       "Badge Text" => badge_text,
-      "Bound Hosts" => [@path],
+      "Bound Hosts" => ["#{@path}/*"],
       "Use Separate Colors for Light and Dark Mode" => false,
       "Rewritable" => true,
     }

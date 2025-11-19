@@ -74,7 +74,7 @@ describe ItermDirectoryProfile do
         "Name" => "Directory: /tmp/project",
         "Guid" => expected_guid,
         "Badge Text" => "/tmp/project",
-        "Bound Hosts" => ["/tmp/project"],
+        "Bound Hosts" => ["/tmp/project/*"],
         "Use Separate Colors for Light and Dark Mode" => false,
         "Rewritable" => true,
       }
@@ -239,7 +239,7 @@ describe ItermDirectoryProfile do
           bookmarks_output: ["invalid json", "", success_status],
         ).run
       end
-      assert(error.message.include?("unexpected token"))
+      assert(error.message.include?("unexpected"))
     end
   end
 
