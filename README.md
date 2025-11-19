@@ -1,67 +1,66 @@
-# iTerm2 Dynamic Worktree Profiles
+# iTerm2 Directory-Based Profiles
 
-Automatically create and switch iTerm2 profiles based on your current git worktree, making it visually easy to distinguish between different projects.
+Automatically create and switch iTerm2 profiles based on your current directory, making it visually easy to distinguish between different projects and directories.
 
 ## What It Does
 
-This script creates dynamic iTerm2 profiles for git worktrees with:
+This script creates dynamic iTerm2 profiles for directories with:
 
-- **Automatic profile creation**: Unique iTerm2 profile for each worktree
-- **Visual differentiation**: Assigns color presets and worktree name badges
-- **Persistent color choices**: Remembers color assignments per worktree
-- **Smart color selection**: Avoids reusing colors already assigned to other worktrees
+- **Automatic profile creation**: Unique iTerm2 profile for each directory
+- **Visual differentiation**: Assigns color presets and directory/branch name badges
+- **Persistent color choices**: Remembers color assignments per directory
+- **Smart color selection**: Avoids reusing colors already assigned to other directories
 - **Profile inheritance**: Merges with your default iTerm2 profile settings
-- **Shell integration**: Automatically switches profiles when changing directories
-- **Profile activation**: Immediately activates the profile using iTerm2's shell integration
+- **Native automatic switching**: Uses iTerm2's "Bound Hosts" feature for seamless profile switching
+- **Git branch badges**: Shows git branch name in badge when available, falls back to directory path
 
 ## Requirements
 
 - **macOS** - Uses macOS-specific commands
 - **iTerm2** - Installed at `/Applications/iTerm.app`
-- **Ruby 3.3.7** - Or any version that supports the standard library features used
-- **git** - For worktree detection
-- **iTerm2 Shell Integration** (optional) - For automatic profile switching
+- **Ruby** - Any version with standard library support
+- **git** (optional) - For git branch badge display
 
 ## Installation
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/MihaiOnSoftware/directoryBasedProfiles.git
-   cd directoryBasedProfiles
-   ```
+Run the installation script to set up the command:
 
-2. Make the script executable:
-   ```bash
-   chmod +x bin/iterm_worktree_profile.rb
-   ```
+```bash
+./install.sh
+```
 
-3. (Optional) Add to your PATH or create an alias:
-   ```bash
-   # Add to ~/.zshrc or ~/.bashrc
-   alias iterm-profile='/path/to/directoryBasedProfiles/bin/iterm_worktree_profile.rb'
-   ```
+This will:
+1. Create a symlink at `~/.local/bin/iterm_directory_profile`
+2. Add `~/.local/bin` to your PATH in `~/.zshrc` (if not already present)
+
+After installation, reload your shell:
+
+```bash
+source ~/.zshrc
+```
+
+Or start a new shell session.
 
 ## Usage
 
 ### Basic Usage
 
-Run the script from within any git worktree:
+Run the command from within any directory:
 
 ```bash
-./bin/iterm_worktree_profile.rb
+iterm_directory_profile
 ```
 
 This will:
-1. Detect the current worktree
+1. Detect the current directory
 2. Generate or load a profile with a color preset
 3. Create the profile in iTerm2's DynamicProfiles
-4. Write a `.iterm_profile` marker file
-5. Activate the profile (if shell integration is installed)
+4. Register the directory path as a "Bound Host" for automatic switching
 
 ### Specify a Color Preset
 
 ```bash
-./bin/iterm_worktree_profile.rb --preset "Solarized Dark"
+iterm_directory_profile --preset "Solarized Dark"
 ```
 
 Available presets:
@@ -75,47 +74,35 @@ Available presets:
 ### Specify a Path
 
 ```bash
-./bin/iterm_worktree_profile.rb /path/to/worktree
+iterm_directory_profile /path/to/directory
 ```
 
 ### Clear All Profiles
 
-Remove all worktree profiles and configuration:
+Remove all directory profiles and configuration:
 
 ```bash
-./bin/iterm_worktree_profile.rb --clear-all
+iterm_directory_profile --clear-all
 ```
 
-## Shell Integration Setup
+## Automatic Profile Switching
 
-For automatic profile switching when changing directories:
+After creating a profile for a directory, iTerm2 will automatically switch to that profile when you `cd` into that directory. This works through iTerm2's native "Bound Hosts" feature, which monitors your current working directory.
 
-1. Install iTerm2 Shell Integration:
-   - iTerm2 menu → Install Shell Integration
-
-2. Add the integration code to your shell:
-   ```bash
-   ./bin/iterm_worktree_profile.rb --generate-shell-integration >> ~/.zshrc
-   ```
-
-3. Reload your shell:
-   ```bash
-   source ~/.zshrc
-   ```
-
-Now your iTerm2 profile will automatically switch when you `cd` into different worktrees.
+No additional shell integration or configuration is required beyond running the `iterm_directory_profile` command once for each directory you want to track.
 
 ## How It Works
 
-1. **Profile Generation**: Creates a unique GUID based on worktree name (stable across runs)
+1. **Profile Generation**: Creates a unique GUID based on directory path (stable across runs)
 2. **Color Assignment**:
    - First run: Randomly selects from 6 preferred presets
-   - Subsequent runs: Reuses the saved color for that worktree
-   - Avoids colors already assigned to other worktrees
-3. **Profile Storage**: Stores profiles in `~/Library/Application Support/iTerm2/DynamicProfiles/worktrees.json`
-4. **Configuration**: Saves color assignments in `~/.config/iterm_worktree_profile.json`
-5. **Marker File**: Creates `.iterm_profile` in the worktree root containing the profile name
-6. **Shell Integration**: Shell hook reads `.iterm_profile` and switches to that profile
+   - Subsequent runs: Reuses the saved color for that directory
+   - Avoids colors already assigned to other directories
+3. **Profile Storage**: Stores profiles in `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json`
+4. **Configuration**: Saves color assignments in `~/.config/iterm_directory_profile.json`
+5. **Bound Hosts**: Registers the directory path in the profile's "Bound Hosts" field
+6. **Automatic Switching**: iTerm2 monitors your current directory and activates the matching profile automatically
+7. **Badge Display**: Shows git branch name in badge if in a git repository, otherwise shows directory path
 
 ## Development
 
@@ -130,7 +117,7 @@ bundle install
 Run the test suite:
 
 ```bash
-ruby test/iterm_worktree_profile_test.rb
+ruby test/iterm_directory_profile_test.rb
 ```
 
 The test suite includes:
@@ -149,18 +136,18 @@ open coverage/index.html
 
 ## Files Created
 
-- `~/Library/Application Support/iTerm2/DynamicProfiles/worktrees.json` - Dynamic profiles
-- `~/.config/iterm_worktree_profile.json` - Color preset configuration
-- `.iterm_profile` - Marker file in each worktree root
+- `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json` - Dynamic profiles
+- `~/.config/iterm_directory_profile.json` - Color preset configuration
+- `~/.local/bin/iterm_directory_profile` - Symlink to the script (created by install.sh)
 
 ## Troubleshooting
 
 ### Profile not switching automatically
 
-1. Verify iTerm2 Shell Integration is installed
-2. Check that the shell integration code is in your `~/.zshrc`
-3. Ensure you've restarted your shell or run `source ~/.zshrc`
-4. Verify the `.iterm_profile` file exists in your worktree root
+1. Ensure you've run `iterm_directory_profile` in the directory at least once
+2. Check that the profile exists in `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json`
+3. Verify that iTerm2 is monitoring your working directory (this is enabled by default)
+4. Try restarting iTerm2 to reload the dynamic profiles
 
 ### Color preset not found
 
@@ -173,7 +160,8 @@ plutil -convert json -o - /Applications/iTerm.app/Contents/Resources/ColorPreset
 
 iTerm2 reads DynamicProfiles on launch and periodically. Try:
 1. Restarting iTerm2
-2. Checking `~/Library/Application Support/iTerm2/DynamicProfiles/worktrees.json` exists
+2. Checking `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json` exists
+3. Verifying the JSON file is valid with `cat ~/Library/Application\ Support/iTerm2/DynamicProfiles/directories.json | jq`
 
 ## License
 
