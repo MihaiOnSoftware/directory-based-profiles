@@ -866,6 +866,16 @@ describe ItermDirectoryProfile do
 
       assert_equal(expected_config, JSON.parse(@written_files[config_file]))
     end
+
+    it "succeeds when files don't exist" do
+      ItermDirectoryProfile.delete_profile(
+        path: "/tmp/project1",
+        existing_profiles_content: nil,
+        config_file_content: nil
+      )
+
+      assert_equal({}, @written_files)
+    end
   end
 
   describe "CLI" do
