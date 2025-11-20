@@ -77,6 +77,27 @@ class ItermDirectoryProfile
   end
 
   class << self
+    def delete_profile(path:, existing_profiles_content:)
+      guid_to_delete = generate_stable_guid(path)
+      existing_profiles = parse_profiles_content(existing_profiles_content)
+      remaining_profiles = existing_profiles.reject { |p| p["Guid"] == guid_to_delete }
+
+      profiles_data = { "Profiles" => remaining_profiles }
+      File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
+    end
+
+    def parse_profiles_content(content)
+      return [] if content.nil?
+
+      data = JSON.parse(content)
+      data["Profiles"] || []
+    end
+
+    def generate_stable_guid(directory_name)
+      hash = Digest::SHA256.hexdigest(directory_name)
+      "#{hash[0..7]}-#{hash[8..11]}-#{hash[12..15]}-#{hash[16..19]}-#{hash[20..31]}".upcase
+    end
+
     def clear_all_profiles
       File.delete(DYNAMIC_PROFILES_FILE) if File.exist?(DYNAMIC_PROFILES_FILE)
       File.delete(CONFIG_FILE) if File.exist?(CONFIG_FILE)
@@ -207,8 +228,7 @@ class ItermDirectoryProfile
   end
 
   def generate_stable_guid(directory_name)
-    hash = Digest::SHA256.hexdigest(directory_name)
-    "#{hash[0..7]}-#{hash[8..11]}-#{hash[12..15]}-#{hash[16..19]}-#{hash[20..31]}".upcase
+    self.class.generate_stable_guid(directory_name)
   end
 
   def get_display_name
@@ -295,10 +315,7 @@ class ItermDirectoryProfile
   end
 
   def read_existing_profiles
-    return [] if @existing_profiles_content.nil?
-
-    data = JSON.parse(@existing_profiles_content)
-    data["Profiles"] || []
+    self.class.parse_profiles_content(@existing_profiles_content)
   end
 
   def merge_with_existing_profiles(existing_profiles, new_profile)

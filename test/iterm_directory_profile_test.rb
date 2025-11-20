@@ -791,6 +791,53 @@ describe ItermDirectoryProfile do
     end
   end
 
+  describe "delete profile" do
+    before do
+      stub_directory_exists(dynamic_profiles_dir, true)
+      stub_config_file_operations
+    end
+
+    it "removes profile from directories.json by path" do
+      guid_to_delete = generate_expected_guid("/tmp/project1")
+      guid_to_keep = generate_expected_guid("/tmp/project2")
+
+      existing_content = JSON.generate({
+        "Profiles" => [
+          {
+            "Name" => "Directory: /tmp/project1",
+            "Guid" => guid_to_delete,
+            "Badge Text" => "/tmp/project1",
+            "Bound Hosts" => ["/tmp/project1/*"],
+          },
+          {
+            "Name" => "Directory: /tmp/project2",
+            "Guid" => guid_to_keep,
+            "Badge Text" => "/tmp/project2",
+            "Bound Hosts" => ["/tmp/project2/*"],
+          },
+        ],
+      })
+
+      ItermDirectoryProfile.delete_profile(
+        path: "/tmp/project1",
+        existing_profiles_content: existing_content
+      )
+
+      expected_structure = {
+        "Profiles" => [
+          {
+            "Name" => "Directory: /tmp/project2",
+            "Guid" => guid_to_keep,
+            "Badge Text" => "/tmp/project2",
+            "Bound Hosts" => ["/tmp/project2/*"],
+          },
+        ],
+      }
+
+      assert_equal(expected_structure, JSON.parse(@written_files[dynamic_profiles_file]))
+    end
+  end
+
   describe "CLI" do
     before do
       stub_config_file_operations
