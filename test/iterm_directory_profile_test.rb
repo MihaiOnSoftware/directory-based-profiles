@@ -836,6 +836,24 @@ describe ItermDirectoryProfile do
 
       assert_equal(expected_structure, JSON.parse(@written_files[dynamic_profiles_file]))
     end
+
+    it "removes path entry from config when config exists" do
+      existing_config_content = JSON.generate({
+        "/tmp/project1" => "Solarized Dark",
+        "/tmp/project2" => "Tango Dark",
+      })
+
+      ItermDirectoryProfile.delete_profile(
+        path: "/tmp/project1",
+        existing_profiles_content: nil,
+        config_file_content: existing_config_content
+      )
+
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
+      expected_config = { "/tmp/project2" => "Tango Dark" }
+
+      assert_equal(expected_config, JSON.parse(@written_files[config_file]))
+    end
   end
 
   describe "CLI" do

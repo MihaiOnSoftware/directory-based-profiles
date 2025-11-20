@@ -77,13 +77,21 @@ class ItermDirectoryProfile
   end
 
   class << self
-    def delete_profile(path:, existing_profiles_content:)
-      guid_to_delete = generate_stable_guid(path)
-      existing_profiles = parse_profiles_content(existing_profiles_content)
-      remaining_profiles = existing_profiles.reject { |p| p["Guid"] == guid_to_delete }
+    def delete_profile(path:, existing_profiles_content:, config_file_content: nil)
+      if existing_profiles_content
+        guid_to_delete = generate_stable_guid(path)
+        existing_profiles = parse_profiles_content(existing_profiles_content)
+        remaining_profiles = existing_profiles.reject { |p| p["Guid"] == guid_to_delete }
 
-      profiles_data = { "Profiles" => remaining_profiles }
-      File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
+        profiles_data = { "Profiles" => remaining_profiles }
+        File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
+      end
+
+      if config_file_content
+        config = JSON.parse(config_file_content)
+        config.delete(path)
+        File.write(CONFIG_FILE, JSON.pretty_generate(config))
+      end
     end
 
     def parse_profiles_content(content)
