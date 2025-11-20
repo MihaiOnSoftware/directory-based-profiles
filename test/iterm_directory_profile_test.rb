@@ -797,6 +797,18 @@ describe ItermDirectoryProfile do
       stub_config_file_operations
     end
 
+    it "uses same guid generation logic as profile creation" do
+      create_instance(path: "/tmp/test-project", existing_profiles_content: nil).run
+
+      ItermDirectoryProfile.delete_profile(
+        path: "/tmp/test-project",
+        existing_profiles_content: @written_files[dynamic_profiles_file]
+      )
+
+      remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
+      assert_equal([], remaining_profiles["Profiles"])
+    end
+
     it "removes profile from directories.json by path" do
       guid_to_delete = generate_expected_guid("/tmp/project1")
       guid_to_keep = generate_expected_guid("/tmp/project2")
