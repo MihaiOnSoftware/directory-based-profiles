@@ -900,26 +900,40 @@ describe ItermDirectoryProfile do
       existing_profiles = JSON.generate({
                                           'Profiles' => [
                                             {
-                                              'Name' => 'Directory: /Users/test/project1',
+                                              'Name' => 'Directory: /Users/test/project',
                                               'Guid' => 'GUID-1',
                                               'Badge Text' => 'main',
-                                              'Bound Hosts' => ['/Users/test/project1/*']
-                                            },
-                                            {
-                                              'Name' => 'Directory: /Users/test/project2',
-                                              'Guid' => 'GUID-2',
-                                              'Badge Text' => 'feature-branch',
-                                              'Bound Hosts' => ['/Users/test/project2/*']
+                                              'Bound Hosts' => ['/Users/test/project/*']
                                             }
                                           ]
                                         })
 
       result = ItermDirectoryProfile.find_profile_path_by_name(
-        profile_name: 'Directory: /Users/test/project2',
+        profile_name: 'Directory: /Users/test/project',
         existing_profiles_content: existing_profiles
       )
 
-      assert_equal('/Users/test/project2', result)
+      assert_equal('/Users/test/project', result)
+    end
+
+    it 'returns nil when profile name does not match any existing profile' do
+      existing_profiles = JSON.generate({
+                                          'Profiles' => [
+                                            {
+                                              'Name' => 'Directory: /Users/test/project',
+                                              'Guid' => 'GUID-1',
+                                              'Badge Text' => 'main',
+                                              'Bound Hosts' => ['/Users/test/project/*']
+                                            }
+                                          ]
+                                        })
+
+      result = ItermDirectoryProfile.find_profile_path_by_name(
+        profile_name: 'Directory: /Users/test/nonexistent',
+        existing_profiles_content: existing_profiles
+      )
+
+      assert_nil(result)
     end
   end
 
