@@ -1,38 +1,31 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "json"
-require "fileutils"
-require "open3"
-require "digest"
+require 'json'
+require 'fileutils'
+require 'open3'
+require 'digest'
 
 class ItermDirectoryProfile
   PREFERRED_PRESETS = [
-    "Solarized Dark",
-    "Tango Dark",
-    "Solarized Light",
-    "Tango Light",
-    "Pastel (Dark Background)",
-    "Smoooooth",
+    'Solarized Dark',
+    'Tango Dark',
+    'Solarized Light',
+    'Tango Light',
+    'Pastel (Dark Background)',
+    'Smoooooth'
   ].freeze
 
-  ITERM_PREFS_PATH = File.expand_path("~/Library/Preferences/com.googlecode.iterm2.plist")
-  COLOR_PRESETS_PATH = "/Applications/iTerm.app/Contents/Resources/ColorPresets.plist"
-  CONFIG_DIR = File.expand_path("~/.config")
-  CONFIG_FILE = File.join(CONFIG_DIR, "iterm_directory_profile.json")
-  DYNAMIC_PROFILES_DIR = File.expand_path("~/Library/Application Support/iTerm2/DynamicProfiles")
-  DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, "directories.json")
+  ITERM_PREFS_PATH = File.expand_path('~/Library/Preferences/com.googlecode.iterm2.plist')
+  COLOR_PRESETS_PATH = '/Applications/iTerm.app/Contents/Resources/ColorPresets.plist'
+  CONFIG_DIR = File.expand_path('~/.config')
+  CONFIG_FILE = File.join(CONFIG_DIR, 'iterm_directory_profile.json')
+  DYNAMIC_PROFILES_DIR = File.expand_path('~/Library/Application Support/iTerm2/DynamicProfiles')
+  DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, 'directories.json')
 
   def initialize(
-    preset_name: nil,
+    default_guid_output:, bookmarks_output:, color_presets_output:, directory_path_output:, git_branch_output:, config_file_content:, existing_profiles_content:, preset_name: nil,
     path: nil,
-    default_guid_output:,
-    bookmarks_output:,
-    color_presets_output:,
-    directory_path_output:,
-    git_branch_output:,
-    config_file_content:,
-    existing_profiles_content:,
     stdout: $stdout,
     stderr: $stderr
   )
@@ -52,17 +45,17 @@ class ItermDirectoryProfile
   end
 
   def run
-    display_name = get_display_name
+    get_display_name
     config = read_config
 
     config_preset = config[@path]
     preset = if config_preset && @preset_name.nil?
-      config_preset
-    elsif !config_preset && @preset_name.nil?
-      select_random_preset(config.values)
-    else
-      @preset_name
-    end
+               config_preset
+             elsif !config_preset && @preset_name.nil?
+               select_random_preset(config.values)
+             else
+               @preset_name
+             end
 
     profile = generate_minimal_profile
     default_profile = read_default_profile
@@ -73,7 +66,7 @@ class ItermDirectoryProfile
     config[@path] = preset
     write_config(config)
 
-    @stdout.puts "Profile '#{profile["Name"]}' created successfully!"
+    @stdout.puts "Profile '#{profile['Name']}' created successfully!"
   end
 
   class << self
@@ -81,24 +74,24 @@ class ItermDirectoryProfile
       if existing_profiles_content
         guid_to_delete = generate_stable_guid(path)
         existing_profiles = parse_profiles_content(existing_profiles_content)
-        remaining_profiles = existing_profiles.reject { |p| p["Guid"] == guid_to_delete }
+        remaining_profiles = existing_profiles.reject { |p| p['Guid'] == guid_to_delete }
 
-        profiles_data = { "Profiles" => remaining_profiles }
+        profiles_data = { 'Profiles' => remaining_profiles }
         File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
       end
 
-      if config_file_content
-        config = JSON.parse(config_file_content)
-        config.delete(path)
-        File.write(CONFIG_FILE, JSON.pretty_generate(config))
-      end
+      return unless config_file_content
+
+      config = JSON.parse(config_file_content)
+      config.delete(path)
+      File.write(CONFIG_FILE, JSON.pretty_generate(config))
     end
 
     def parse_profiles_content(content)
       return [] if content.nil?
 
       data = JSON.parse(content)
-      data["Profiles"] || []
+      data['Profiles'] || []
     end
 
     def generate_stable_guid(directory_name)
@@ -117,21 +110,22 @@ class ItermDirectoryProfile
       delete_path = nil
 
       OptionParser.new do |opts|
-        opts.banner = "Usage: iterm_directory_profile.rb [options] [path]"
+        opts.banner = 'Usage: iterm_directory_profile.rb [options] [path]'
 
-        opts.on("-p", "--preset PRESET_NAME", "Color preset to use (default: saved config or random selection)") do |preset|
+        opts.on('-p', '--preset PRESET_NAME',
+                'Color preset to use (default: saved config or random selection)') do |preset|
           options[:preset_name] = preset
         end
 
-        opts.on("-d", "--delete PATH", "Delete profile for specified path") do |path|
+        opts.on('-d', '--delete PATH', 'Delete profile for specified path') do |path|
           delete_path = path
         end
 
-        opts.on("-c", "--clear-all", "Clear all directory profiles") do
+        opts.on('-c', '--clear-all', 'Clear all directory profiles') do
           clear_all = true
         end
 
-        opts.on("-h", "--help", "Show this help message") do
+        opts.on('-h', '--help', 'Show this help message') do
           stdout.puts opts
           return 0
         end
@@ -151,7 +145,7 @@ class ItermDirectoryProfile
 
       if clear_all
         clear_all_profiles
-        stdout.puts "All directory profiles cleared"
+        stdout.puts 'All directory profiles cleared'
         return 0
       end
 
@@ -164,12 +158,12 @@ class ItermDirectoryProfile
         directory_path_output: fetch_directory_path_output,
         git_branch_output: fetch_git_branch_output,
         config_file_content: fetch_config_file_content,
-        existing_profiles_content: fetch_existing_profiles_content,
+        existing_profiles_content: fetch_existing_profiles_content
       }
 
       begin
         new(**options.merge(io_results).merge(stdout: stdout, stderr: stderr)).run
-        stdout.puts "Dynamic profile created successfully"
+        stdout.puts 'Dynamic profile created successfully'
         0
       rescue StandardError => e
         stdout.puts "Error: #{e.message}"
@@ -181,13 +175,13 @@ class ItermDirectoryProfile
 
     def fetch_default_guid_output
       Open3.capture3(
-        "/usr/libexec/PlistBuddy", "-c", "Print 'Default Bookmark Guid'", ITERM_PREFS_PATH
+        '/usr/libexec/PlistBuddy', '-c', "Print 'Default Bookmark Guid'", ITERM_PREFS_PATH
       )
     end
 
     def fetch_bookmarks_output
       Open3.capture3(
-        "/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ITERM_PREFS_PATH} | plutil -convert json -o - -",
+        "/usr/libexec/PlistBuddy -x -c \"Print 'New Bookmarks'\" #{ITERM_PREFS_PATH} | plutil -convert json -o - -"
       )
     end
 
@@ -200,7 +194,7 @@ class ItermDirectoryProfile
     end
 
     def fetch_git_branch_output
-      Open3.capture3("git", "rev-parse", "--abbrev-ref", "HEAD")
+      Open3.capture3('git', 'rev-parse', '--abbrev-ref', 'HEAD')
     end
 
     def fetch_config_file_content
@@ -243,12 +237,12 @@ class ItermDirectoryProfile
     guid = generate_stable_guid(@path)
 
     {
-      "Name" => profile_name,
-      "Guid" => guid,
-      "Badge Text" => badge_text,
-      "Bound Hosts" => ["#{@path}/*"],
-      "Use Separate Colors for Light and Dark Mode" => false,
-      "Rewritable" => true,
+      'Name' => profile_name,
+      'Guid' => guid,
+      'Badge Text' => badge_text,
+      'Bound Hosts' => ["#{@path}/*"],
+      'Use Separate Colors for Light and Dark Mode' => false,
+      'Rewritable' => true
     }
   end
 
@@ -275,9 +269,7 @@ class ItermDirectoryProfile
   def read_default_guid
     stdout, _stderr, status = @default_guid_output
 
-    unless status.success?
-      raise StandardError, "Unable to read default profile GUID from iTerm2 preferences"
-    end
+    raise StandardError, 'Unable to read default profile GUID from iTerm2 preferences' unless status.success?
 
     stdout.strip
   end
@@ -285,33 +277,25 @@ class ItermDirectoryProfile
   def read_bookmarks
     stdout, _stderr, status = @bookmarks_output
 
-    unless status.success?
-      raise StandardError, "Unable to read bookmarks from iTerm2 preferences"
-    end
+    raise StandardError, 'Unable to read bookmarks from iTerm2 preferences' unless status.success?
 
     JSON.parse(stdout)
   end
 
   def find_bookmark_by_guid(target_guid, bookmarks)
-    bookmark = bookmarks.find { |b| b["Guid"] == target_guid }
+    bookmark = bookmarks.find { |b| b['Guid'] == target_guid }
 
-    unless bookmark
-      raise StandardError, "Default profile not found in iTerm2 bookmarks"
-    end
+    raise StandardError, 'Default profile not found in iTerm2 bookmarks' unless bookmark
 
     bookmark
   end
 
   def load_color_preset(preset_name)
-    unless File.exist?(COLOR_PRESETS_PATH)
-      raise StandardError, "ColorPresets.plist not found at #{COLOR_PRESETS_PATH}"
-    end
+    raise StandardError, "ColorPresets.plist not found at #{COLOR_PRESETS_PATH}" unless File.exist?(COLOR_PRESETS_PATH)
 
     stdout, _stderr, status = @color_presets_output
 
-    unless status.success?
-      raise StandardError, "Unable to read ColorPresets.plist"
-    end
+    raise StandardError, 'Unable to read ColorPresets.plist' unless status.success?
 
     presets = JSON.parse(stdout)
 
@@ -333,7 +317,7 @@ class ItermDirectoryProfile
     merged_profiles = merge_with_existing_profiles(existing_profiles, profile)
 
     profiles_data = {
-      "Profiles" => merged_profiles,
+      'Profiles' => merged_profiles
     }
 
     File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
@@ -344,9 +328,9 @@ class ItermDirectoryProfile
   end
 
   def merge_with_existing_profiles(existing_profiles, new_profile)
-    new_guid = new_profile["Guid"]
+    new_guid = new_profile['Guid']
 
-    existing_without_duplicate = existing_profiles.reject { |p| p["Guid"] == new_guid }
+    existing_without_duplicate = existing_profiles.reject { |p| p['Guid'] == new_guid }
     existing_without_duplicate + [new_profile]
   end
 
@@ -362,6 +346,6 @@ class ItermDirectoryProfile
 end
 
 if __FILE__ == $PROGRAM_NAME
-  require "optparse"
+  require 'optparse'
   exit(ItermDirectoryProfile.run_cli(ARGV))
 end
