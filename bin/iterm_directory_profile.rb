@@ -114,12 +114,17 @@ class ItermDirectoryProfile
     def run_cli(argv, stdout: $stdout, stderr: $stderr)
       options = {}
       clear_all = false
+      delete_path = nil
 
       OptionParser.new do |opts|
         opts.banner = "Usage: iterm_directory_profile.rb [options] [path]"
 
         opts.on("-p", "--preset PRESET_NAME", "Color preset to use (default: saved config or random selection)") do |preset|
           options[:preset_name] = preset
+        end
+
+        opts.on("-d", "--delete PATH", "Delete profile for specified path") do |path|
+          delete_path = path
         end
 
         opts.on("-c", "--clear-all", "Clear all directory profiles") do
@@ -131,6 +136,18 @@ class ItermDirectoryProfile
           return 0
         end
       end.parse!(argv)
+
+      if delete_path
+        existing_profiles_content = fetch_existing_profiles_content
+        config_file_content = fetch_config_file_content
+        delete_profile(
+          path: delete_path,
+          existing_profiles_content: existing_profiles_content,
+          config_file_content: config_file_content
+        )
+        stdout.puts "Profile for '#{delete_path}' deleted successfully"
+        return 0
+      end
 
       if clear_all
         clear_all_profiles

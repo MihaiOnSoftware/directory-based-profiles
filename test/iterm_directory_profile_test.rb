@@ -972,6 +972,46 @@ describe ItermDirectoryProfile do
       assert_equal(0, exit_code, "CLI should exit successfully")
       assert_match(/All directory profiles cleared/, output.string)
     end
+
+    it "handles -d flag with path argument" do
+      guid_to_delete = generate_expected_guid("/tmp/test-project")
+
+      existing_profiles = JSON.generate({
+        "Profiles" => [
+          {
+            "Name" => "Directory: /tmp/test-project",
+            "Guid" => guid_to_delete,
+            "Badge Text" => "/tmp/test-project",
+            "Bound Hosts" => ["/tmp/test-project/*"],
+          },
+        ],
+      })
+
+      existing_config = JSON.generate({
+        "/tmp/test-project" => "Solarized Dark",
+      })
+
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(true)
+      File.stubs(:read).with(dynamic_profiles_file).returns(existing_profiles)
+
+      config_file = File.expand_path("~/.config/iterm_directory_profile.json")
+      File.stubs(:exist?).with(config_file).returns(true)
+      File.stubs(:read).with(config_file).returns(existing_config)
+
+      output = StringIO.new
+      exit_code = ItermDirectoryProfile.run_cli(["-d", "/tmp/test-project"], stdout: output)
+
+      assert_equal(0, exit_code, "CLI should exit successfully")
+      assert_match(/deleted/, output.string)
+
+      assert(@written_files.key?(dynamic_profiles_file), "Should write updated profiles")
+      remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
+      assert_equal([], remaining_profiles["Profiles"], "Profile should be removed")
+
+      assert(@written_files.key?(config_file), "Should write updated config")
+      remaining_config = JSON.parse(@written_files[config_file])
+      refute(remaining_config.key?("/tmp/test-project"), "Config entry should be removed")
+    end
   end
 
   private
