@@ -74,6 +74,14 @@ class ItermDirectoryProfile
       ENV['ITERM_PROFILE']
     end
 
+    def find_profile_path_by_name(profile_name:, existing_profiles_content:)
+      profiles = parse_profiles_content(existing_profiles_content)
+      profile = profiles.find { |p| p['Name'] == profile_name }
+      return nil unless profile
+
+      profile['Name'].sub('Directory: ', '')
+    end
+
     def delete_profile(path:, existing_profiles_content:, config_file_content: nil)
       found = false
 

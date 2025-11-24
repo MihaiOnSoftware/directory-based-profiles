@@ -895,6 +895,34 @@ describe ItermDirectoryProfile do
     end
   end
 
+  describe 'find_profile_path_by_name' do
+    it 'maps profile name to directory path' do
+      existing_profiles = JSON.generate({
+                                          'Profiles' => [
+                                            {
+                                              'Name' => 'Directory: /Users/test/project1',
+                                              'Guid' => 'GUID-1',
+                                              'Badge Text' => 'main',
+                                              'Bound Hosts' => ['/Users/test/project1/*']
+                                            },
+                                            {
+                                              'Name' => 'Directory: /Users/test/project2',
+                                              'Guid' => 'GUID-2',
+                                              'Badge Text' => 'feature-branch',
+                                              'Bound Hosts' => ['/Users/test/project2/*']
+                                            }
+                                          ]
+                                        })
+
+      result = ItermDirectoryProfile.find_profile_path_by_name(
+        profile_name: 'Directory: /Users/test/project2',
+        existing_profiles_content: existing_profiles
+      )
+
+      assert_equal('/Users/test/project2', result)
+    end
+  end
+
   describe 'CLI' do
     before do
       stub_config_file_operations
