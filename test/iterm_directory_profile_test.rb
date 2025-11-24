@@ -1030,6 +1030,46 @@ describe ItermDirectoryProfile do
       assert_equal(0, exit_code, 'CLI should exit successfully')
       assert_match(/No profile found/, output.string)
     end
+
+    it 'uses current directory path when -d has no argument' do
+      test_dir = '/test/current/dir'
+      Dir.stubs(:pwd).returns(test_dir)
+
+      guid_to_delete = generate_expected_guid(test_dir)
+
+      existing_profiles = JSON.generate({
+                                          'Profiles' => [
+                                            {
+                                              'Name' => "Directory: #{test_dir}",
+                                              'Guid' => guid_to_delete,
+                                              'Badge Text' => test_dir,
+                                              'Bound Hosts' => ["#{test_dir}/*"]
+                                            }
+                                          ]
+                                        })
+
+      existing_config = JSON.generate({
+                                        test_dir => 'Solarized Dark'
+                                      })
+
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(true)
+      File.stubs(:read).with(dynamic_profiles_file).returns(existing_profiles)
+
+      config_file = File.expand_path('~/.config/iterm_directory_profile.json')
+      File.stubs(:exist?).with(config_file).returns(true)
+      File.stubs(:read).with(config_file).returns(existing_config)
+
+      output = StringIO.new
+      ItermDirectoryProfile.run_cli(['-d'], stdout: output)
+
+      assert(@written_files.key?(dynamic_profiles_file), 'Should write updated profiles')
+      remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
+      assert_equal([], remaining_profiles['Profiles'], 'Profile should be removed from current directory')
+
+      assert(@written_files.key?(config_file), 'Should write updated config')
+      remaining_config = JSON.parse(@written_files[config_file])
+      refute(remaining_config.key?(test_dir), 'Config entry should be removed for current directory')
+    end
   end
 
   private

@@ -87,7 +87,7 @@ class ItermDirectoryProfile
       return found unless config_file_content
 
       config = JSON.parse(config_file_content)
-      found = found || config.key?(path)
+      found ||= config.key?(path)
       config.delete(path)
       File.write(CONFIG_FILE, JSON.pretty_generate(config))
 
@@ -124,8 +124,8 @@ class ItermDirectoryProfile
           options[:preset_name] = preset
         end
 
-        opts.on('-d', '--delete PATH', 'Delete profile for specified path') do |path|
-          delete_path = path
+        opts.on('-d', '--delete [PATH]', 'Delete profile for specified path') do |path|
+          delete_path = path || Dir.pwd
         end
 
         opts.on('-c', '--clear-all', 'Clear all directory profiles') do
