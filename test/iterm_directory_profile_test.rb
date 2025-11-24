@@ -877,6 +877,16 @@ describe ItermDirectoryProfile do
     end
   end
 
+  describe 'fetch_iterm_profile_name' do
+    it 'reads ITERM_PROFILE environment variable when set' do
+      ENV.stubs(:[]).with('ITERM_PROFILE').returns('Directory: /test/project')
+
+      result = ItermDirectoryProfile.fetch_iterm_profile_name
+
+      assert_equal('Directory: /test/project', result)
+    end
+  end
+
   describe 'CLI' do
     before do
       stub_config_file_operations

@@ -70,6 +70,10 @@ class ItermDirectoryProfile
   end
 
   class << self
+    def fetch_iterm_profile_name
+      ENV['ITERM_PROFILE']
+    end
+
     def delete_profile(path:, existing_profiles_content:, config_file_content: nil)
       found = false
 
