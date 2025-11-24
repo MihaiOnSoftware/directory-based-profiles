@@ -1017,6 +1017,19 @@ describe ItermDirectoryProfile do
       remaining_config = JSON.parse(@written_files[config_file])
       refute(remaining_config.key?('/tmp/test-project'), 'Config entry should be removed')
     end
+
+    it 'prints warning when deleting non-existent profile' do
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(false)
+
+      config_file = File.expand_path('~/.config/iterm_directory_profile.json')
+      File.stubs(:exist?).with(config_file).returns(false)
+
+      output = StringIO.new
+      exit_code = ItermDirectoryProfile.run_cli(['-d', '/tmp/non-existent'], stdout: output)
+
+      assert_equal(0, exit_code, 'CLI should exit successfully')
+      assert_match(/No profile found/, output.string)
+    end
   end
 
   private

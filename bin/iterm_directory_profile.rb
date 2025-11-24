@@ -71,20 +71,27 @@ class ItermDirectoryProfile
 
   class << self
     def delete_profile(path:, existing_profiles_content:, config_file_content: nil)
+      found = false
+
       if existing_profiles_content
         guid_to_delete = generate_stable_guid(path)
         existing_profiles = parse_profiles_content(existing_profiles_content)
         remaining_profiles = existing_profiles.reject { |p| p['Guid'] == guid_to_delete }
 
+        found = existing_profiles.size != remaining_profiles.size
+
         profiles_data = { 'Profiles' => remaining_profiles }
         File.write(DYNAMIC_PROFILES_FILE, JSON.pretty_generate(profiles_data))
       end
 
-      return unless config_file_content
+      return found unless config_file_content
 
       config = JSON.parse(config_file_content)
+      found = found || config.key?(path)
       config.delete(path)
       File.write(CONFIG_FILE, JSON.pretty_generate(config))
+
+      found
     end
 
     def parse_profiles_content(content)
@@ -134,12 +141,18 @@ class ItermDirectoryProfile
       if delete_path
         existing_profiles_content = fetch_existing_profiles_content
         config_file_content = fetch_config_file_content
-        delete_profile(
+        found = delete_profile(
           path: delete_path,
           existing_profiles_content: existing_profiles_content,
           config_file_content: config_file_content
         )
-        stdout.puts "Profile for '#{delete_path}' deleted successfully"
+
+        if found
+          stdout.puts "Profile for '#{delete_path}' deleted successfully"
+        else
+          stdout.puts "No profile found for '#{delete_path}'"
+        end
+
         return 0
       end
 
