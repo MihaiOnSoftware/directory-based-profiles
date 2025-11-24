@@ -885,6 +885,14 @@ describe ItermDirectoryProfile do
 
       assert_equal('Directory: /test/project', result)
     end
+
+    it 'returns nil when ITERM_PROFILE environment variable is not set' do
+      ENV.stubs(:[]).with('ITERM_PROFILE').returns(nil)
+
+      result = ItermDirectoryProfile.fetch_iterm_profile_name
+
+      assert_nil(result)
+    end
   end
 
   describe 'CLI' do
