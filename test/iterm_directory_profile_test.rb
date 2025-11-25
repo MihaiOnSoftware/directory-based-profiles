@@ -1163,6 +1163,41 @@ describe ItermDirectoryProfile do
       remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
       assert_equal([], remaining_profiles['Profiles'], 'Profile should be removed using iTerm-detected path')
     end
+
+    it 'skips profile lookup when iTerm returns non-directory profile name' do
+      current_dir = '/test/current/dir'
+      Dir.stubs(:pwd).returns(current_dir)
+
+      guid_to_delete = generate_expected_guid(current_dir)
+
+      existing_profiles = JSON.generate({
+                                          'Profiles' => [
+                                            {
+                                              'Name' => "Directory: #{current_dir}",
+                                              'Guid' => guid_to_delete,
+                                              'Badge Text' => current_dir,
+                                              'Bound Hosts' => ["#{current_dir}/*"]
+                                            }
+                                          ]
+                                        })
+
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(true)
+      File.stubs(:read).with(dynamic_profiles_file).returns(existing_profiles)
+
+      config_file = File.expand_path('~/.config/iterm_directory_profile.json')
+      File.stubs(:exist?).with(config_file).returns(false)
+
+      Open3.stubs(:capture3).with('it2profile', '-g').returns(["Default\n", '', success_status])
+
+      ItermDirectoryProfile.expects(:find_profile_path_by_name).never
+
+      output = StringIO.new
+      ItermDirectoryProfile.run_cli(['-d'], stdout: output)
+
+      assert(@written_files.key?(dynamic_profiles_file), 'Should write updated profiles')
+      remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
+      assert_equal([], remaining_profiles['Profiles'], 'Profile should be removed using current directory')
+    end
   end
 
   private

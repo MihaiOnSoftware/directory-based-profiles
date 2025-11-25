@@ -145,7 +145,7 @@ class ItermDirectoryProfile
             delete_path = path
           else
             profile_name = fetch_iterm_profile_name
-            if profile_name
+            if profile_name&.start_with?('Directory: ')
               existing_profiles_content = fetch_existing_profiles_content
               delete_path = find_profile_path_by_name(
                 profile_name: profile_name,
