@@ -48,14 +48,14 @@ describe ItermDirectoryProfile do
     end
 
     it 'generates profile with unique guid' do
-      create_instance(path: '/tmp/project', existing_profiles_content: nil).run
+      run_script(path: '/tmp/project', existing_profiles_content: nil)
 
       guid = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
       assert_valid_guid_format(guid)
     end
 
     it 'writes to correct dynamic profiles location' do
-      create_instance(path: '/tmp/project', existing_profiles_content: nil).run
+      run_script(path: '/tmp/project', existing_profiles_content: nil)
 
       assert(@written_files.key?(dynamic_profiles_file), "Should write to #{dynamic_profiles_file}")
     end
@@ -86,16 +86,16 @@ describe ItermDirectoryProfile do
 
       FileUtils.expects(:mkdir_p).with(dynamic_profiles_dir)
 
-      create_instance(path: '/tmp/project', existing_profiles_content: nil).run
+      run_script(path: '/tmp/project', existing_profiles_content: nil)
     end
 
     it 'overwrites existing file' do
       first_write_json = JSON.generate({ 'Profiles' => [{ 'Name' => 'Test', 'Guid' => 'TEST-GUID' }] })
 
-      create_instance(path: '/tmp/project', existing_profiles_content: nil).run
+      run_script(path: '/tmp/project', existing_profiles_content: nil)
       assert(@written_files.key?(dynamic_profiles_file), 'Should write file on first run')
 
-      create_instance(path: '/tmp/project', existing_profiles_content: first_write_json).run
+      run_script(path: '/tmp/project', existing_profiles_content: first_write_json)
       assert(@written_files.key?(dynamic_profiles_file), 'Should write file on second run')
     end
   end
@@ -797,7 +797,7 @@ describe ItermDirectoryProfile do
     end
 
     it 'uses same guid generation logic as profile creation' do
-      create_instance(path: '/tmp/test-project', existing_profiles_content: nil).run
+      run_script(path: '/tmp/test-project', existing_profiles_content: nil)
 
       ItermDirectoryProfile.delete_profile(
         path: '/tmp/test-project',
@@ -1218,7 +1218,7 @@ describe ItermDirectoryProfile do
 
   def run_and_get_guid(path)
     setup_basic_environment
-    create_instance(path: path).run
+    run_script(path: path)
     JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
   end
 
@@ -1395,6 +1395,10 @@ describe ItermDirectoryProfile do
 
   def create_instance(**overrides)
     ItermDirectoryProfile.new(**default_io_results.merge(overrides))
+  end
+
+  def run_script(**overrides)
+    ItermDirectoryProfile.new(**default_io_results.merge(overrides)).run
   end
 
   def stub_default_profile
