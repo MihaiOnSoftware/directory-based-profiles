@@ -85,6 +85,26 @@ Remove all directory profiles and configuration:
 iterm_directory_profile --clear-all
 ```
 
+### Delete a Profile
+
+Remove the iTerm2 profile for a specific directory:
+
+```bash
+# Delete profile for current directory
+iterm_directory_profile -d
+
+# Delete profile for specific path
+iterm_directory_profile -d /path/to/directory
+```
+
+The delete command intelligently determines which profile to remove:
+1. If you provide a path explicitly, it deletes that directory's profile
+2. If no path is given, it queries iTerm2 for your currently active profile using `it2profile -g`
+3. If iTerm2 returns a valid directory profile, it deletes that profile
+4. Otherwise, it falls back to deleting the profile for your current directory
+
+This means you can run `iterm_directory_profile -d` from any location, and it will delete the profile that's currently active in your iTerm2 window, regardless of what directory you're in.
+
 ## Automatic Profile Switching
 
 After creating a profile for a directory, iTerm2 will automatically switch to that profile when you `cd` into that directory. This works through iTerm2's native "Bound Hosts" feature, which monitors your current working directory.
@@ -136,8 +156,8 @@ open coverage/index.html
 
 ## Files Created
 
-- `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json` - Dynamic profiles
-- `~/.config/iterm_directory_profile.json` - Color preset configuration
+- `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json` - Dynamic profiles (modified by create and delete operations)
+- `~/.config/iterm_directory_profile.json` - Color preset configuration (modified by create and delete operations)
 - `~/.local/bin/iterm_directory_profile` - Symlink to the script (created by install.sh)
 
 ## Troubleshooting
@@ -162,6 +182,26 @@ iTerm2 reads DynamicProfiles on launch and periodically. Try:
 1. Restarting iTerm2
 2. Checking `~/Library/Application Support/iTerm2/DynamicProfiles/directories.json` exists
 3. Verifying the JSON file is valid with `cat ~/Library/Application\ Support/iTerm2/DynamicProfiles/directories.json | jq`
+
+### Delete command doesn't find the right profile
+
+If `iterm_directory_profile -d` deletes the wrong profile or can't find a profile:
+
+1. **Check what iTerm2 thinks is the active profile**:
+   ```bash
+   it2profile -g
+   ```
+   This shows the profile name iTerm2 currently reports. The delete command uses this to find which directory's profile to remove.
+
+2. **Profile name doesn't match a directory**: If iTerm2 reports "Default" or another non-directory profile name, the delete command falls back to using your current directory. Make sure you're in the directory whose profile you want to delete, or provide the path explicitly:
+   ```bash
+   iterm_directory_profile -d /path/to/directory
+   ```
+
+3. **Profile deleted but iTerm2 still shows colors**: iTerm2 may cache the profile. Try:
+   - Opening a new tab or window
+   - Restarting iTerm2
+   - The profile is removed from `directories.json` but iTerm2 needs to reload
 
 ## License
 
