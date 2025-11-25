@@ -878,16 +878,16 @@ describe ItermDirectoryProfile do
   end
 
   describe 'fetch_iterm_profile_name' do
-    it 'reads ITERM_PROFILE environment variable when set' do
-      ENV.stubs(:[]).with('ITERM_PROFILE').returns('Directory: /test/project')
+    it 'calls it2profile -g and returns profile name when command succeeds' do
+      Open3.stubs(:capture3).with('it2profile', '-g').returns(["Directory: /test/project\n", '', success_status])
 
       result = ItermDirectoryProfile.fetch_iterm_profile_name
 
       assert_equal('Directory: /test/project', result)
     end
 
-    it 'returns nil when ITERM_PROFILE environment variable is not set' do
-      ENV.stubs(:[]).with('ITERM_PROFILE').returns(nil)
+    it 'returns nil when command fails' do
+      Open3.stubs(:capture3).with('it2profile', '-g').returns(['', 'command not found', failure_status])
 
       result = ItermDirectoryProfile.fetch_iterm_profile_name
 

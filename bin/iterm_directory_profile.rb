@@ -71,7 +71,11 @@ class ItermDirectoryProfile
 
   class << self
     def fetch_iterm_profile_name
-      ENV['ITERM_PROFILE']
+      stdout, _stderr, status = Open3.capture3('it2profile', '-g')
+
+      return stdout.strip if status.success?
+
+      nil
     end
 
     def find_profile_path_by_name(profile_name:, existing_profiles_content:)
