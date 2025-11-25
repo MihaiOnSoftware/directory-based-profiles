@@ -61,8 +61,9 @@ Start with the simplest implementation (explicit path argument) and progressivel
 
 **Implementation**:
 - Add `fetch_iterm_profile_name` class method
-  - Query `ENV['ITERM_PROFILE']` environment variable
-  - Return profile name or nil if not available
+  - Use `it2profile -g` command (iTerm2's official utility)
+  - Return profile name or nil if command fails
+  - ~~Originally tried `ENV['ITERM_PROFILE']` but it doesn't update with Bound Hosts profiles~~
 - Add `find_profile_path_by_name(profile_name)` method
   - Read existing profiles from `directories.json`
   - Find profile with matching "Name" field
@@ -74,8 +75,8 @@ Start with the simplest implementation (explicit path argument) and progressivel
 - Print which path was found and used (helpful for debugging)
 
 **Tests**:
-- `fetch_iterm_profile_name` reads `$ITERM_PROFILE` when set
-- Returns nil when env var not set
+- `fetch_iterm_profile_name` calls `it2profile -g` and returns result
+- Returns nil when command fails
 - `find_profile_path_by_name` maps profile name to path correctly
 - Handles "Directory: " prefix extraction
 - Returns nil when profile name doesn't match any path
@@ -84,7 +85,11 @@ Start with the simplest implementation (explicit path argument) and progressivel
 
 **Success criteria**: Can query and use iTerm profile name to find which directory's profile to delete
 
-**Manual verification needed**: Test whether `$ITERM_PROFILE` environment variable updates when cd'ing into directories with Bound Hosts profiles. This determines if the approach is reliable for automatic profile switching scenarios.
+**Findings from implementation**:
+- ❌ `ENV['ITERM_PROFILE']` does NOT work - stays as "Default" even with active Bound Hosts profiles
+- ✅ `it2profile -g` DOES work - correctly returns active profile name
+- Research showed AppleScript also works but `it2profile -g` is simpler and official
+- Slice 4 (parent walking) is NOT needed - iTerm query approach works reliably
 
 ---
 
