@@ -1119,6 +1119,8 @@ describe ItermDirectoryProfile do
       File.stubs(:exist?).with(config_file).returns(true)
       File.stubs(:read).with(config_file).returns(existing_config)
 
+      Open3.stubs(:capture3).with('it2profile', '-g').returns(['', 'command not found', failure_status])
+
       output = StringIO.new
       ItermDirectoryProfile.run_cli(['-d'], stdout: output)
 
@@ -1129,6 +1131,37 @@ describe ItermDirectoryProfile do
       assert(@written_files.key?(config_file), 'Should write updated config')
       remaining_config = JSON.parse(@written_files[config_file])
       refute(remaining_config.key?(test_dir), 'Config entry should be removed for current directory')
+    end
+
+    it 'queries iTerm profile when -d has no argument and uses matched path' do
+      iterm_path = '/Users/test/iterm-project'
+      guid_to_delete = generate_expected_guid(iterm_path)
+
+      existing_profiles = JSON.generate({
+                                          'Profiles' => [
+                                            {
+                                              'Name' => "Directory: #{iterm_path}",
+                                              'Guid' => guid_to_delete,
+                                              'Badge Text' => iterm_path,
+                                              'Bound Hosts' => ["#{iterm_path}/*"]
+                                            }
+                                          ]
+                                        })
+
+      File.stubs(:exist?).with(dynamic_profiles_file).returns(true)
+      File.stubs(:read).with(dynamic_profiles_file).returns(existing_profiles)
+
+      config_file = File.expand_path('~/.config/iterm_directory_profile.json')
+      File.stubs(:exist?).with(config_file).returns(false)
+
+      Open3.stubs(:capture3).with('it2profile', '-g').returns(["Directory: #{iterm_path}\n", '', success_status])
+
+      output = StringIO.new
+      ItermDirectoryProfile.run_cli(['-d'], stdout: output)
+
+      assert(@written_files.key?(dynamic_profiles_file), 'Should write updated profiles')
+      remaining_profiles = JSON.parse(@written_files[dynamic_profiles_file])
+      assert_equal([], remaining_profiles['Profiles'], 'Profile should be removed using iTerm-detected path')
     end
   end
 

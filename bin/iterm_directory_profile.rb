@@ -141,7 +141,19 @@ class ItermDirectoryProfile
         end
 
         opts.on('-d', '--delete [PATH]', 'Delete profile for specified path') do |path|
-          delete_path = path || Dir.pwd
+          if path
+            delete_path = path
+          else
+            profile_name = fetch_iterm_profile_name
+            if profile_name
+              existing_profiles_content = fetch_existing_profiles_content
+              delete_path = find_profile_path_by_name(
+                profile_name: profile_name,
+                existing_profiles_content: existing_profiles_content
+              )
+            end
+            delete_path ||= Dir.pwd
+          end
         end
 
         opts.on('-c', '--clear-all', 'Clear all directory profiles') do
