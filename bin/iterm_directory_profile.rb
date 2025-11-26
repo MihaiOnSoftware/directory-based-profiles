@@ -24,12 +24,11 @@ class ItermDirectoryProfile
   DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, 'directories.json')
 
   def initialize(
-    default_guid_output:, bookmarks_output:, color_presets_output:, directory_path_output:, git_branch_output:, config_file_content:, existing_profiles_content:, preset_name: nil,
+    default_guid_output:, bookmarks_output:, color_presets_output:, directory_path_output:, git_branch_output:, config_file_content:, existing_profiles_content:,
     path: nil,
     stdout: $stdout,
     stderr: $stderr
   )
-    @preset_name = preset_name
     @path = path
     @default_guid_output = default_guid_output
     @bookmarks_output = bookmarks_output
@@ -44,17 +43,17 @@ class ItermDirectoryProfile
     @path ||= detect_current_directory if path.nil?
   end
 
-  def run
+  def run(preset_name: nil)
     get_display_name
     config = read_config
 
     config_preset = config[@path]
-    preset = if config_preset && @preset_name.nil?
+    preset = if config_preset && preset_name.nil?
                config_preset
-             elsif !config_preset && @preset_name.nil?
+             elsif !config_preset && preset_name.nil?
                select_random_preset(config.values)
              else
-               @preset_name
+               preset_name
              end
 
     profile = generate_minimal_profile
@@ -129,6 +128,7 @@ class ItermDirectoryProfile
 
     def run_cli(argv, stdout: $stdout, stderr: $stderr)
       options = {}
+      preset_name = nil
       clear_all = false
       delete_path = nil
 
@@ -137,7 +137,7 @@ class ItermDirectoryProfile
 
         opts.on('-p', '--preset PRESET_NAME',
                 'Color preset to use (default: saved config or random selection)') do |preset|
-          options[:preset_name] = preset
+          preset_name = preset
         end
 
         opts.on('-d', '--delete [PATH]', 'Delete profile for specified path') do |path|
@@ -203,7 +203,7 @@ class ItermDirectoryProfile
       }
 
       begin
-        new(**options.merge(io_results).merge(stdout: stdout, stderr: stderr)).run
+        new(**options.merge(io_results).merge(stdout: stdout, stderr: stderr)).run(preset_name: preset_name)
         stdout.puts 'Dynamic profile created successfully'
         0
       rescue StandardError => e

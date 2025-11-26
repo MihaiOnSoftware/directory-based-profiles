@@ -264,11 +264,10 @@ describe ItermDirectoryProfile do
       presets_hash['Solarized Dark'] = preset_data
 
       create_instance(
-        preset_name: 'Solarized Dark',
         path: '/tmp/project',
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run
+      ).run(preset_name: 'Solarized Dark')
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_color_components(profile, preset_data)
@@ -295,13 +294,12 @@ describe ItermDirectoryProfile do
       presets_hash['Tango Dark'] = preset_colors
 
       create_instance(
-        preset_name: 'Tango Dark',
         path: '/tmp/project',
         default_guid_output: ["DEFAULT-GUID\n", '', success_status],
         bookmarks_output: [JSON.generate([default_profile]), '', success_status],
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run
+      ).run(preset_name: 'Tango Dark')
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_profile_properties(profile, { 'Columns' => 120, 'Font' => 'Monaco' })
@@ -316,10 +314,9 @@ describe ItermDirectoryProfile do
 
       assert_raises_with_message(StandardError, /Color preset 'NonExistent' not found/) do
         create_instance(
-          preset_name: 'NonExistent',
           path: '/tmp/project',
           color_presets_output: [JSON.generate(presets_hash), '', success_status]
-        ).run
+        ).run(preset_name: 'NonExistent')
       end
     end
 
@@ -330,9 +327,8 @@ describe ItermDirectoryProfile do
 
       assert_raises_with_message(StandardError, /ColorPresets.plist not found/) do
         create_instance(
-          preset_name: 'Solarized Dark',
           path: '/tmp/project'
-        ).run
+        ).run(preset_name: 'Solarized Dark')
       end
     end
 
@@ -342,10 +338,9 @@ describe ItermDirectoryProfile do
 
       assert_raises_with_message(StandardError, /Unable to read ColorPresets.plist/) do
         create_instance(
-          preset_name: 'Solarized Dark',
           path: '/tmp/project',
           color_presets_output: ['', 'plutil failed', failure_status]
-        ).run
+        ).run(preset_name: 'Solarized Dark')
       end
     end
 
@@ -380,11 +375,10 @@ describe ItermDirectoryProfile do
       presets_hash['Smoooooth'] = preset_data
 
       create_instance(
-        preset_name: 'Smoooooth',
         path: '/tmp/project',
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run
+      ).run(preset_name: 'Smoooooth')
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_equal({ 'Red Component' => 1.0 }, profile['Background Color'])
@@ -591,13 +585,12 @@ describe ItermDirectoryProfile do
       presets_hash['Tango Dark'] = preset_data
 
       create_instance(
-        preset_name: nil,
         path: '/Users/test/testworktree',
         git_branch_output: ['', 'not a git repo', failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run
+      ).run(preset_name: nil)
 
       parsed = JSON.parse(@written_files[dynamic_profiles_file])
       profile = parsed['Profiles'][0]
@@ -611,12 +604,11 @@ describe ItermDirectoryProfile do
       Array.any_instance.stubs(:sample).returns('Tango Light')
 
       create_instance(
-        preset_name: nil,
         path: '/tmp/randomproject',
         git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: nil,
         existing_profiles_content: nil
-      ).run
+      ).run(preset_name: nil)
 
       parsed_config = JSON.parse(@written_files[config_file])
       assert_equal('Tango Light', parsed_config['/tmp/randomproject'], 'Should save the randomly selected preset')
@@ -642,13 +634,12 @@ describe ItermDirectoryProfile do
       presets_hash['Smoooooth'] = preset_data
 
       create_instance(
-        preset_name: 'Smoooooth',
         path: '/Users/test/explicitworktree',
         git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run
+      ).run(preset_name: 'Smoooooth')
 
       parsed = JSON.parse(@written_files[dynamic_profiles_file])
       profile = parsed['Profiles'][0]
@@ -739,10 +730,9 @@ describe ItermDirectoryProfile do
       create_instance(
         path: '/Users/test/worktree2',
         git_branch_output: ['', 'fatal: not a git repository', failure_status],
-        preset_name: 'Tango Dark',
         config_file_content: nil,
         existing_profiles_content: nil
-      ).run
+      ).run(preset_name: 'Tango Dark')
 
       parsed_config = JSON.parse(written_config)
       assert_equal('Tango Dark', parsed_config['/Users/test/worktree2'])
@@ -780,10 +770,9 @@ describe ItermDirectoryProfile do
       create_instance(
         path: '/Users/test/worktree5',
         git_branch_output: ['', 'fatal: not a git repository', failure_status],
-        preset_name: 'New Preset',
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil
-      ).run
+      ).run(preset_name: 'New Preset')
 
       parsed_config = JSON.parse(written_config)
       assert_equal('New Preset', parsed_config['/Users/test/worktree5'])
@@ -1397,8 +1386,8 @@ describe ItermDirectoryProfile do
     ItermDirectoryProfile.new(**default_io_results.merge(overrides))
   end
 
-  def run_script(**overrides)
-    ItermDirectoryProfile.new(**default_io_results.merge(overrides)).run
+  def run_script(preset_name: nil, **overrides)
+    ItermDirectoryProfile.new(**default_io_results.merge(overrides)).run(preset_name: preset_name)
   end
 
   def stub_default_profile
