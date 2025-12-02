@@ -63,9 +63,8 @@ describe ItermDirectoryProfile do
     it 'writes profile with required fields and correct structure' do
       create_instance(
         path: '/tmp/project',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
 
@@ -234,10 +233,9 @@ describe ItermDirectoryProfile do
       error = assert_raises(StandardError) do
         create_instance(
           path: '/tmp/project',
-          git_branch_output: ['', 'fatal: not a git repository', failure_status],
           default_guid_output: ["TEST-GUID\n", '', success_status],
           bookmarks_output: ['invalid json', '', success_status]
-        ).run
+        ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
       end
       assert(error.message.include?('unexpected'))
     end
@@ -396,9 +394,8 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/myworktree',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_valid_directory_profile(profile, '/Users/test/myworktree')
@@ -410,9 +407,8 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/myproject/src',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_valid_directory_profile(profile, '/Users/test/myproject/src')
@@ -451,17 +447,15 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/directory1',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       first_guid = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
 
       create_instance(
         path: '/Users/test/directory2',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       second_guid = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
 
@@ -480,9 +474,8 @@ describe ItermDirectoryProfile do
 
       create_instance(
         directory_path_output: '/Users/test/myworktree',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_valid_directory_profile(profile, '/Users/test/myworktree')
@@ -494,14 +487,28 @@ describe ItermDirectoryProfile do
       stub_config_file_operations
     end
 
+    it 'accepts git_branch_output as run parameter instead of constructor parameter' do
+      stub_directory_exists(dynamic_profiles_dir, true)
+
+      instance = create_instance(
+        path: '/Users/test/myproject',
+        existing_profiles_content: nil
+      )
+
+      instance.run(git_branch_output: ["feature/awesome\n", '', success_status])
+
+      profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
+      assert_equal('Directory: /Users/test/myproject', profile['Name'])
+      assert_equal('feature/awesome', profile['Badge Text'])
+    end
+
     it 'uses path for profile name and branch name for badge when git is available' do
       stub_directory_exists(dynamic_profiles_dir, true)
 
       create_instance(
         path: '/Users/test/myproject',
-        git_branch_output: ["feature/awesome-feature\n", '', success_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ["feature/awesome-feature\n", '', success_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_equal('Directory: /Users/test/myproject', profile['Name'])
@@ -513,9 +520,8 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/myproject',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       profile = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]
       assert_equal('Directory: /Users/test/myproject', profile['Name'])
@@ -527,17 +533,15 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/project1',
-        git_branch_output: ["feature-branch\n", '', success_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ["feature-branch\n", '', success_status])
 
       first_guid = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
 
       create_instance(
         path: '/Users/test/project2',
-        git_branch_output: ["feature-branch\n", '', success_status],
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ["feature-branch\n", '', success_status])
 
       second_guid = JSON.parse(@written_files[dynamic_profiles_file])['Profiles'][0]['Guid']
 
@@ -563,10 +567,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/tmp/project',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: nil,
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(@written_files[config_file])
       assert_equal('Smoooooth', parsed_config['/tmp/project'], 'Should save the selected preset')
@@ -586,11 +589,10 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/testworktree',
-        git_branch_output: ['', 'not a git repo', failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run(preset_name: nil)
+      ).run(preset_name: nil, git_branch_output: ['', 'not a git repo', failure_status])
 
       parsed = JSON.parse(@written_files[dynamic_profiles_file])
       profile = parsed['Profiles'][0]
@@ -605,10 +607,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/tmp/randomproject',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: nil,
         existing_profiles_content: nil
-      ).run(preset_name: nil)
+      ).run(preset_name: nil, git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(@written_files[config_file])
       assert_equal('Tango Light', parsed_config['/tmp/randomproject'], 'Should save the randomly selected preset')
@@ -635,11 +636,10 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/explicitworktree',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil,
         color_presets_output: [JSON.generate(presets_hash), '', success_status]
-      ).run(preset_name: 'Smoooooth')
+      ).run(preset_name: 'Smoooooth', git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed = JSON.parse(@written_files[dynamic_profiles_file])
       profile = parsed['Profiles'][0]
@@ -662,10 +662,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/tmp/new_worktree',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: JSON.generate(existing_config),
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(@written_files[config_file])
       assigned_preset = parsed_config['/tmp/new_worktree']
@@ -690,10 +689,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/tmp/new_worktree',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: JSON.generate(existing_config),
         existing_profiles_content: nil
-      ).run
+      ).run(git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(@written_files[config_file])
       assigned_preset = parsed_config['/tmp/new_worktree']
@@ -729,10 +727,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/worktree2',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: nil,
         existing_profiles_content: nil
-      ).run(preset_name: 'Tango Dark')
+      ).run(preset_name: 'Tango Dark', git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(written_config)
       assert_equal('Tango Dark', parsed_config['/Users/test/worktree2'])
@@ -769,10 +766,9 @@ describe ItermDirectoryProfile do
 
       create_instance(
         path: '/Users/test/worktree5',
-        git_branch_output: ['', 'fatal: not a git repository', failure_status],
         config_file_content: JSON.generate(config_data),
         existing_profiles_content: nil
-      ).run(preset_name: 'New Preset')
+      ).run(preset_name: 'New Preset', git_branch_output: ['', 'fatal: not a git repository', failure_status])
 
       parsed_config = JSON.parse(written_config)
       assert_equal('New Preset', parsed_config['/Users/test/worktree5'])
@@ -1376,18 +1372,23 @@ describe ItermDirectoryProfile do
       bookmarks_output: [JSON.generate([{ 'Guid' => 'DEFAULT-GUID' }]), '', success_status],
       color_presets_output: [JSON.generate(all_presets), '', success_status],
       directory_path_output: '/tmp/test_directory',
-      git_branch_output: ["main\n", '', success_status],
       config_file_content: '{}',
       existing_profiles_content: nil
     }
+  end
+
+  def default_git_branch_output
+    ["main\n", '', success_status]
   end
 
   def create_instance(**overrides)
     ItermDirectoryProfile.new(**default_io_results.merge(overrides))
   end
 
-  def run_script(preset_name: nil, **overrides)
-    ItermDirectoryProfile.new(**default_io_results.merge(overrides)).run(preset_name: preset_name)
+  def run_script(preset_name: nil, git_branch_output: nil, **overrides)
+    git_branch_output ||= default_git_branch_output
+    ItermDirectoryProfile.new(**default_io_results.merge(overrides)).run(preset_name: preset_name,
+                                                                         git_branch_output: git_branch_output)
   end
 
   def stub_default_profile

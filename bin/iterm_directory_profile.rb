@@ -24,7 +24,7 @@ class ItermDirectoryProfile
   DYNAMIC_PROFILES_FILE = File.join(DYNAMIC_PROFILES_DIR, 'directories.json')
 
   def initialize(
-    default_guid_output:, bookmarks_output:, color_presets_output:, directory_path_output:, git_branch_output:, config_file_content:, existing_profiles_content:,
+    default_guid_output:, bookmarks_output:, color_presets_output:, directory_path_output:, config_file_content:, existing_profiles_content:,
     path: nil,
     stdout: $stdout,
     stderr: $stderr
@@ -34,7 +34,6 @@ class ItermDirectoryProfile
     @bookmarks_output = bookmarks_output
     @color_presets_output = color_presets_output
     @directory_path_output = directory_path_output
-    @git_branch_output = git_branch_output
     @config_file_content = config_file_content
     @existing_profiles_content = existing_profiles_content
     @stdout = stdout
@@ -43,8 +42,8 @@ class ItermDirectoryProfile
     @path ||= detect_current_directory if path.nil?
   end
 
-  def run(preset_name: nil)
-    get_display_name
+  def run(preset_name: nil, git_branch_output: nil)
+    display_name = get_display_name(git_branch_output)
     config = read_config
 
     config_preset = config[@path]
@@ -56,7 +55,7 @@ class ItermDirectoryProfile
                preset_name
              end
 
-    profile = generate_minimal_profile
+    profile = generate_minimal_profile(display_name)
     default_profile = read_default_profile
     color_preset = load_color_preset(preset)
     merged_profile = merge_profiles(profile, default_profile, color_preset)
@@ -197,13 +196,15 @@ class ItermDirectoryProfile
         bookmarks_output: fetch_bookmarks_output,
         color_presets_output: fetch_color_presets_output,
         directory_path_output: fetch_directory_path_output,
-        git_branch_output: fetch_git_branch_output,
         config_file_content: fetch_config_file_content,
         existing_profiles_content: fetch_existing_profiles_content
       }
 
+      git_branch_output = fetch_git_branch_output
+
       begin
-        new(**options.merge(io_results).merge(stdout: stdout, stderr: stderr)).run(preset_name: preset_name)
+        new(**options.merge(io_results).merge(stdout: stdout, stderr: stderr)).run(preset_name: preset_name,
+                                                                                   git_branch_output: git_branch_output)
         stdout.puts 'Dynamic profile created successfully'
         0
       rescue StandardError => e
@@ -271,8 +272,7 @@ class ItermDirectoryProfile
     FileUtils.mkdir_p(CONFIG_DIR)
   end
 
-  def generate_minimal_profile
-    display_name = get_display_name
+  def generate_minimal_profile(display_name)
     profile_name = "Directory: #{@path}"
     badge_text = display_name
     guid = generate_stable_guid(@path)
@@ -291,8 +291,10 @@ class ItermDirectoryProfile
     self.class.generate_stable_guid(directory_name)
   end
 
-  def get_display_name
-    stdout, _stderr, status = @git_branch_output
+  def get_display_name(git_branch_output)
+    return @path if git_branch_output.nil?
+
+    stdout, _stderr, status = git_branch_output
 
     if status.success? && !stdout.strip.empty?
       stdout.strip
